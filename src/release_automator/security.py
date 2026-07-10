@@ -22,6 +22,16 @@ SECRET_PATTERNS = {
 }
 
 
+def redact_secrets(text: str) -> tuple[str, list[str]]:
+    redacted = text
+    detected: list[str] = []
+    for label, pattern in SECRET_PATTERNS.items():
+        redacted, count = pattern.subn(f"<REDACTED {label.upper()}>", redacted)
+        if count:
+            detected.append(label)
+    return redacted, detected
+
+
 def assert_safe_paths(paths: list[str]) -> None:
     for path_text in paths:
         path = PurePosixPath(path_text)

@@ -39,6 +39,7 @@ def propose_metadata(
     validations: list[ValidationResult],
     releases: list[ReleaseInfo],
     release_enabled: bool,
+    redacted_secret_types: list[str],
     client: OpenAI | None = None,
 ) -> ModelProposal:
     if not os.environ.get("OPENAI_API_KEY") and client is None:
@@ -52,6 +53,7 @@ def propose_metadata(
         "releases": [item.model_dump(mode="json") for item in releases],
         "release_enabled": release_enabled,
         "release_side_effect_notice": config.release.side_effect_notice,
+        "redacted_secret_types": redacted_secret_types,
         "diff": diff,
     }
     try:

@@ -22,7 +22,11 @@ from release_automator.workflow import create_plan, render_plan
 
 
 class FakeResponses:
-    def parse(self, **_kwargs: object) -> SimpleNamespace:
+    def __init__(self) -> None:
+        self.last_kwargs: dict[str, object] | None = None
+
+    def parse(self, **kwargs: object) -> SimpleNamespace:
+        self.last_kwargs = kwargs
         return SimpleNamespace(
             output_parsed=ModelProposal(
                 branch_slug="add-release-automation",
@@ -44,7 +48,8 @@ class FakeResponses:
 
 
 class FakeOpenAI:
-    responses = FakeResponses()
+    def __init__(self) -> None:
+        self.responses = FakeResponses()
 
 
 class FakeGitHub:
@@ -138,3 +143,25 @@ def test_plan_stops_if_validation_expands_selected_scope(git_repository: Path) -
             openai_client=FakeOpenAI(),
             github_client=FakeGitHub(base_sha),  # type: ignore[arg-type]
         )
+
+
+def test_plan_redacts_secret_like_diff_before_model_request(git_repository: Path) -> None:
+    token = "ghp_" + "abcdefghijklmnopqrstuvwxyz123456"
+    (git_repository / "cleanup.py").write_text(f'token = "{token}"\n', encoding="utf-8")
+    base_sha = run_git(git_repository, "rev-parse", "HEAD")
+    client = FakeOpenAI()
+
+    plan = create_plan(
+        repo_path=git_repository,
+        include=[Path("cleanup.py")],
+        config=RepoConfig(checks=ChecksConfig(required=["ci"])),
+        no_release=False,
+        openai_client=client,
+        github_client=FakeGitHub(base_sha),  # type: ignore[arg-type]
+    )
+
+    assert plan.redacted_secret_types == ["GitHub token"]
+    assert client.responses.last_kwargs is not None
+    assert token not in str(client.responses.last_kwargs)
+    assert "<REDACTED GITHUB TOKEN>" in str(client.responses.last_kwargs)
+    assert "Redacted from OpenAI input: `GitHub token`" in render_plan(plan)

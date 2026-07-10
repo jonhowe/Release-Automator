@@ -39,11 +39,11 @@ is configured, but new behavior should be covered.
 
 ## Commit & Pull Request Guidelines
 
-The history currently contains only `Initial commit`, so no formal message convention exists. Use
-a concise, imperative subject such as `Reject staged files outside plan scope`, with a body for
-non-obvious safety decisions. Pull requests should explain behavior and risk, link relevant issues,
-note configuration or lockfile changes, and include CLI output when user-facing behavior changes.
-All Ruff, Pyright, and pytest CI checks must pass.
+Use a concise, imperative subject consistent with recent changes, such as
+`Handle renames in git path detection`, with a body for non-obvious safety decisions. Pull requests
+should explain behavior and risk, link relevant issues, note configuration or lockfile changes, and
+include CLI output when user-facing behavior changes. All Ruff, Pyright, and pytest CI checks must
+pass.
 
 ## Security & Configuration
 

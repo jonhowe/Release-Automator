@@ -1,6 +1,6 @@
 [project]
 name = "release-automator"
-version = "0.1.0"
+version = "0.1.2"
 description = "Plan, approve, and execute deterministic GitHub publication workflows with OpenAI-assisted metadata."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -47,4 +47,3 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
 include = ["src", "tests"]
-

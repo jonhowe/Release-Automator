@@ -101,7 +101,10 @@ uv run release-automator resume --repo /path/to/repository PLAN_ID
 
 - Only explicit `--include` files are staged.
 - Pre-existing staged files outside the selected scope are rejected.
-- `.env`, private-key, credential, and likely token content is blocked before an OpenAI request.
+- Sensitive file paths such as `.env`, private keys, and credential files are blocked before an
+  OpenAI request.
+- Secret-like values in otherwise safe text files are replaced with typed redaction markers before
+  OpenAI receives the diff or validation output; the frozen plan records only the detected types.
 - Model input is capped at 200 KB by default; binary contents are never sent.
 - Invalid model output, failed checks, timeouts, merge conflicts, head drift, and tag collisions
   stop the workflow.
@@ -121,6 +124,15 @@ GitHub operations use its documented REST endpoints:
 - <https://docs.github.com/en/rest/pulls/pulls>
 - <https://docs.github.com/en/rest/checks/runs>
 - <https://docs.github.com/en/rest/releases/releases>
+
+## Security
+
+Report vulnerabilities through GitHub's private vulnerability reporting. See
+[`SECURITY.md`](SECURITY.md) for the disclosure policy and credential-handling guidance.
+
+## License
+
+Release Automator is licensed under the [Apache License 2.0](LICENSE).
 
 ## Moving this project
 
