@@ -17,7 +17,12 @@ from release_automator.models import (
     RunState,
 )
 from release_automator.openai_planner import apply_overrides, propose_metadata
-from release_automator.security import assert_no_secrets, assert_payload_size, assert_safe_paths
+from release_automator.security import (
+    assert_no_secrets,
+    assert_payload_size,
+    assert_safe_paths,
+    redact_secrets,
+)
 from release_automator.state import StateStore
 from release_automator.versioning import validate_suggested_version
 
@@ -126,8 +131,15 @@ def create_plan(
             )
         repo.assert_no_staged_outside(include_paths)
         excluded_paths = repo.excluded_paths(include_paths)
-        diff = repo.model_diff(include_paths)
-        validation_text = "\n".join(item.output for item in validations)
+        diff, diff_redactions = redact_secrets(repo.model_diff(include_paths))
+        safe_validations = []
+        validation_redactions: list[str] = []
+        for item in validations:
+            output, detected = redact_secrets(item.output)
+            validation_redactions.extend(detected)
+            safe_validations.append(item.model_copy(update={"output": output}))
+        redacted_secret_types = sorted(set(diff_redactions + validation_redactions))
+        validation_text = "\n".join(item.output for item in safe_validations)
         model_material = f"{diff}\n{validation_text}"
         assert_payload_size(model_material.encode("utf-8"), config.openai.max_diff_bytes)
         assert_no_secrets(model_material)
@@ -140,9 +152,10 @@ def create_plan(
             include_paths=include_paths,
             excluded_paths=excluded_paths,
             diff=diff,
-            validations=validations,
+            validations=safe_validations,
             releases=releases,
             release_enabled=release_enabled,
+            redacted_secret_types=redacted_secret_types,
             client=openai_client,
         )
         proposal = apply_overrides(proposal, overrides or {})
@@ -162,8 +175,9 @@ def create_plan(
             include_paths=include_paths,
             excluded_paths=excluded_paths,
             snapshot_hash=repo.snapshot_hash(include_paths),
+            redacted_secret_types=redacted_secret_types,
             config=config,
-            validation_results=validations,
+            validation_results=safe_validations,
             releases=releases,
             release_enabled=release_enabled,
             proposal=proposal,
@@ -198,6 +212,13 @@ def render_plan(plan: FrozenPlan) -> str:
         if plan.release_enabled and plan.config.release.side_effect_notice
         else ""
     )
+    security = "- No secret-like values detected in model input."
+    if plan.redacted_secret_types:
+        security = (
+            "- Redacted from OpenAI input: "
+            + ", ".join(f"`{label}`" for label in plan.redacted_secret_types)
+            + ".\n- Redacted values are not stored in this plan."
+        )
     staged_paths = ", ".join(f"`{path}`" for path in plan.include_paths)
     required_checks = ", ".join(f"`{name}`" for name in plan.config.checks.required)
     accepted_conclusions = ", ".join(
@@ -247,6 +268,10 @@ Excluded:
 ## Validation
 
 {validation}
+
+## Model-input security
+
+{security}
 
 ## Git and pull request
 

@@ -7,6 +7,7 @@ from release_automator.security import (
     assert_no_secrets,
     assert_payload_size,
     assert_safe_paths,
+    redact_secrets,
 )
 
 
@@ -23,14 +24,23 @@ def test_example_environment_file_is_allowed() -> None:
 @pytest.mark.parametrize(
     "value",
     [
-        "sk-exampleexampleexampleexample",
-        "ghp_abcdefghijklmnopqrstuvwxyz123456",
-        "-----BEGIN PRIVATE KEY-----",
+        pytest.param("sk-" + "exampleexampleexampleexample", id="openai-key"),
+        pytest.param("ghp_" + "abcdefghijklmnopqrstuvwxyz123456", id="github-token"),
+        pytest.param("-----BEGIN " + "PRIVATE KEY-----", id="private-key"),
     ],
 )
 def test_secret_content_is_blocked(value: str) -> None:
     with pytest.raises(AutomatorError):
         assert_no_secrets(value)
+
+
+def test_secret_content_is_redacted() -> None:
+    token = "ghp_" + "abcdefghijklmnopqrstuvwxyz123456"
+    redacted, detected = redact_secrets(f"token={token}")
+
+    assert redacted == "token=<REDACTED GITHUB TOKEN>"
+    assert detected == ["GitHub token"]
+    assert token not in redacted
 
 
 def test_payload_limit_is_enforced() -> None:
