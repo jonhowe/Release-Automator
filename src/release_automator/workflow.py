@@ -198,6 +198,42 @@ def render_plan(plan: FrozenPlan) -> str:
         if plan.release_enabled and plan.config.release.side_effect_notice
         else ""
     )
+    staged_paths = ", ".join(f"`{path}`" for path in plan.include_paths)
+    required_checks = ", ".join(f"`{name}`" for name in plan.config.checks.required)
+    accepted_conclusions = ", ".join(
+        f"`{conclusion}`" for conclusion in plan.config.checks.accepted_conclusions
+    )
+    if required_checks:
+        checks_action = (
+            f"Wait for required checks {required_checks}; poll every "
+            f"{plan.config.checks.poll_seconds} seconds, allow "
+            f"{plan.config.checks.discovery_timeout_seconds} seconds for discovery and "
+            f"{plan.config.checks.completion_timeout_seconds} seconds for completion, and accept "
+            f"only {accepted_conclusions}."
+        )
+    else:
+        checks_action = "Skip required-check waiting because no checks are explicitly allowed."
+    if plan.config.git.delete_remote_branch:
+        remote_cleanup = f"Delete remote branch `{plan.branch_name}` after the merge."
+    else:
+        remote_cleanup = f"Leave remote branch `{plan.branch_name}` on GitHub after the merge."
+    if plan.release_enabled:
+        prerelease = plan.proposal.release_channel is ReleaseChannel.PRERELEASE
+        release_action = (
+            f"Create a non-draft GitHub Release and tag `{plan.proposal.suggested_version}` "
+            f"targeting the returned merge commit; set prerelease to `{prerelease}` and use the "
+            "release notes printed above."
+        )
+    else:
+        release_action = "Do not create a GitHub Release or tag."
+    if plan.config.git.delete_local_branch:
+        local_cleanup = (
+            f"Fetch `origin/{plan.base_branch}`, check out `{plan.base_branch}`, fast-forward it, "
+            f"and delete local branch `{plan.branch_name}`; report a warning instead if safe "
+            "cleanup cannot be completed."
+        )
+    else:
+        local_cleanup = f"Leave local branch `{plan.branch_name}` checked out after completion."
     return f"""# Publication proposal `{plan.plan_id[:12]}`
 
 ## Scope
@@ -229,6 +265,29 @@ PR body:
 ## Release
 
 {release}{side_effect}
+
+## Execution actions after approval
+
+The validations above ran during planning and are frozen into this plan. Execution will not rerun
+them; it will perform these actions in order:
+
+1. Create or resume `.git/release-automator/runs/{plan.plan_id}.json` and persist progress after
+   each phase.
+2. Authenticate to GitHub and revalidate the repository, `{plan.base_branch}` base SHA, included
+   file hash, staging scope, branch availability, and release tag availability before Git or GitHub
+   mutations.
+3. Create and check out local branch `{plan.branch_name}` from `{plan.base_branch}`.
+4. Stage only {staged_paths} and verify that the staged set matches exactly.
+5. Create commit `{plan.proposal.commit_message}`.
+6. Push `{plan.branch_name}` to `origin` and set its upstream.
+7. Find or open a non-draft pull request from `{plan.branch_name}` to `{plan.base_branch}` titled
+   `{plan.proposal.pr_title}` with the body printed above, then verify its head SHA.
+8. {checks_action}
+9. Wait until the pull request is mergeable, verify its head SHA again, and
+   `{plan.config.git.merge_method}`-merge it using the frozen commit SHA.
+10. {remote_cleanup}
+11. {release_action}
+12. {local_cleanup}
 
 One approval authorizes this exact frozen plan.
 Execute it by typing the short plan ID when prompted.

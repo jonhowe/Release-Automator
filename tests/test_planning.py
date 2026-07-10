@@ -17,7 +17,8 @@ from release_automator.models import (
     RepoConfig,
     ValidationCommand,
 )
-from release_automator.workflow import create_plan
+from release_automator.openai_planner import apply_overrides
+from release_automator.workflow import create_plan, render_plan
 
 
 class FakeResponses:
@@ -85,6 +86,28 @@ def test_plan_freezes_metadata_without_git_writes(git_repository: Path) -> None:
     assert run_git(git_repository, "branch", "--show-current") == "main"
     assert run_git(git_repository, "diff", "--cached", "--name-only") == ""
     assert (git_repository / ".git" / "release-automator" / "plans").is_dir()
+
+    rendered = render_plan(plan)
+    assert "## Execution actions after approval" in rendered
+    assert "Create and check out local branch `agent/add-release-automation`" in rendered
+    assert "Stage only `feature.py`" in rendered
+    assert "Create commit `Add release automation`" in rendered
+    assert "Push `agent/add-release-automation` to `origin`" in rendered
+    assert "open a non-draft pull request" in rendered
+    assert "Wait for required checks `ci`" in rendered
+    assert "`squash`-merge it using the frozen commit SHA" in rendered
+    assert "Delete remote branch `agent/add-release-automation`" in rendered
+    assert "Create a non-draft GitHub Release and tag `v1.1.0`" in rendered
+    assert "delete local branch `agent/add-release-automation`" in rendered
+
+    no_release = render_plan(plan.model_copy(update={"release_enabled": False}))
+    assert "Do not create a GitHub Release or tag." in no_release
+
+    overridden = apply_overrides(plan.proposal, {"suggested_version": "v1.0.1"})
+    assert overridden.suggested_version == "v1.0.1"
+    assert overridden.version_rationale == (
+        "Release version explicitly overridden to v1.0.1 during planning."
+    )
 
 
 def test_plan_stops_if_validation_expands_selected_scope(git_repository: Path) -> None:

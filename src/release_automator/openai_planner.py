@@ -82,7 +82,13 @@ def propose_metadata(
 
 def apply_overrides(proposal: ModelProposal, overrides: dict[str, Any]) -> ModelProposal:
     values = proposal.model_dump(mode="json")
-    values.update({key: value for key, value in overrides.items() if value is not None})
+    updates = {key: value for key, value in overrides.items() if value is not None}
+    if "suggested_version" in updates and "version_rationale" not in updates:
+        version = updates["suggested_version"]
+        updates["version_rationale"] = (
+            f"Release version explicitly overridden to {version} during planning."
+        )
+    values.update(updates)
     try:
         return ModelProposal.model_validate(values)
     except ValidationError as exc:
