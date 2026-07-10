@@ -35,7 +35,7 @@ For a task-oriented walkthrough covering configuration, planning, approval, and 
 
 ## Configure a repository
 
-Copy `examples/media-atlas.toml` and adjust its validation commands, required GitHub check names,
+Copy `examples/python-project.toml` and adjust its validation commands, required GitHub check names,
 release policy, and side-effect notice. Commands are argument arrays and are never evaluated by a
 shell.
 
@@ -54,9 +54,9 @@ directories expand only to changed files beneath that directory.
 ```bash
 uv run release-automator plan \
   --repo /path/to/repository \
-  --config examples/media-atlas.toml \
-  --include backend/app \
-  --include frontend/src
+  --config examples/python-project.toml \
+  --include src \
+  --include tests
 ```
 
 The command performs read-only repository/GitHub inspection, runs configured validations, sends a
@@ -126,4 +126,3 @@ GitHub operations use its documented REST endpoints:
 
 The directory is self-contained. After moving it into a new repository, keep `pyproject.toml`,
 `uv.lock`, `.python-version`, the source/tests, and the nested `.github/workflows/tests.yml` together.
-The parent Media-Atlas `AGENTS.md` is intentionally not modified by this project.

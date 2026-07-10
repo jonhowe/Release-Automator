@@ -71,14 +71,17 @@ class GitRepo:
         return [item for item in output.split("\0") if item]
 
     def changed_paths(self) -> list[str]:
-        tracked = self._split_null(self.run(["diff", "--name-only", "-z", "HEAD"]).stdout)
+        tracked = self._split_null(
+            self.run(["diff", "--no-renames", "--name-only", "-z", "HEAD"]).stdout
+        )
         untracked = self._split_null(
             self.run(["ls-files", "--others", "--exclude-standard", "-z"]).stdout
         )
         return sorted(set(tracked + untracked))
 
     def staged_paths(self) -> list[str]:
-        return sorted(self._split_null(self.run(["diff", "--cached", "--name-only", "-z"]).stdout))
+        output = self.run(["diff", "--cached", "--no-renames", "--name-only", "-z"]).stdout
+        return sorted(self._split_null(output))
 
     def resolve_includes(self, requested: list[Path]) -> list[str]:
         if not requested:
@@ -181,7 +184,17 @@ class GitRepo:
     def commit_paths(self, sha: str) -> list[str]:
         return sorted(
             self._split_null(
-                self.run(["diff-tree", "--no-commit-id", "--name-only", "-r", "-z", sha]).stdout
+                self.run(
+                    [
+                        "diff-tree",
+                        "--no-renames",
+                        "--no-commit-id",
+                        "--name-only",
+                        "-r",
+                        "-z",
+                        sha,
+                    ]
+                ).stdout
             )
         )
 

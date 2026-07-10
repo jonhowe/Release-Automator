@@ -29,6 +29,23 @@ def test_staged_outsider_is_rejected(git_repository: Path) -> None:
         repo.assert_no_staged_outside(["selected.py"])
 
 
+def test_rename_scope_preserves_source_and_destination(git_repository: Path) -> None:
+    source = git_repository / "old-name.txt"
+    destination = git_repository / "new-name.txt"
+    source.write_text("renamed content\n", encoding="utf-8")
+    run_git(git_repository, "add", source.name)
+    run_git(git_repository, "commit", "-m", "Add rename fixture")
+    source.rename(destination)
+    repo = GitRepo(git_repository)
+    expected = [destination.name, source.name]
+
+    assert repo.changed_paths() == expected
+    repo.stage_only(expected)
+    assert repo.staged_paths() == expected
+    commit_sha = repo.commit("Rename fixture")
+    assert repo.commit_paths(commit_sha) == expected
+
+
 def test_snapshot_changes_when_included_content_changes(git_repository: Path) -> None:
     path = git_repository / "README.md"
     path.write_text("changed once\n", encoding="utf-8")
