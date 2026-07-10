@@ -5,7 +5,7 @@ delete_remote_branch = true
 delete_local_branch = true
 
 [checks]
-required = ["build-and-test"]
+required = ["test"]
 accepted_conclusions = ["success"]
 poll_seconds = 10
 discovery_timeout_seconds = 300
@@ -15,19 +15,20 @@ allow_no_checks = false
 [release]
 enabled_by_default = true
 tag_prefix = "v"
-side_effect_notice = "Publishing a release triggers publish-ghcr.yml and publishes the release tag, latest, and a commit-pinned GHCR tag."
+side_effect_notice = "Publishing a release may trigger repository-specific deployment or package workflows."
 
 [openai]
 model = "gpt-5.4-mini-2026-03-17"
 max_diff_bytes = 200000
 
 [[validation]]
-name = "backend tests"
-cwd = "backend"
-argv = ["python", "-m", "unittest", "discover", "-s", "tests"]
+name = "lint"
+argv = ["uv", "run", "--locked", "ruff", "check", "."]
 
 [[validation]]
-name = "frontend build"
-cwd = "frontend"
-argv = ["npm", "run", "build"]
+name = "type check"
+argv = ["uv", "run", "--locked", "pyright"]
 
+[[validation]]
+name = "tests"
+argv = ["uv", "run", "--locked", "pytest"]
