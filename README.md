@@ -30,6 +30,9 @@ uv run release-automator --help
 The committed `uv.lock` is the reproducible dependency source. Use `uv run --locked` in CI and
 normal operation.
 
+For a task-oriented walkthrough covering configuration, planning, approval, and recovery, see the
+[usage guide](docs/usage.md).
+
 ## Configure a repository
 
 Copy `examples/media-atlas.toml` and adjust its validation commands, required GitHub check names,
@@ -72,15 +75,20 @@ uv run release-automator plan \
   --pr-body-file /tmp/pr-body.md
 ```
 
+When `--version` is supplied, the rendered rationale explicitly records that the release version
+was overridden during planning rather than proposed from release history.
+
 ## Approve and execute
 
 ```bash
 uv run release-automator execute --repo /path/to/repository PLAN_ID
 ```
 
-The complete proposal is printed again. Execution starts only after the short plan ID is typed
-exactly. Before the first mutation, the tool verifies the base SHA, included-file hash, branch,
-tag, and credentials have not drifted.
+The complete proposal is printed again, including the exact ordered execution actions, staging
+scope, branch and commit, pull request content, check policy and timeouts, merge method, cleanup,
+and release behavior. Execution starts only after the short plan ID is typed exactly. Before the
+first Git or GitHub mutation, the tool verifies the base SHA, included-file hash, branch, tag, and
+credentials have not drifted.
 
 If the process stops after approval, resume without repeating completed GitHub operations:
 
