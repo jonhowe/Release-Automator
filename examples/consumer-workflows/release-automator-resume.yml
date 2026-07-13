@@ -27,13 +27,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     steps:
-      - name: Check out trusted action code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          path: .release-automator-action
-          persist-credentials: false
-          ref: ${{ github.event.repository.default_branch }}
-
       - name: Check out the target with the release credential
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -67,7 +60,7 @@ jobs:
 
       - name: Resume the exact approved plan
         id: resume
-        uses: ./.release-automator-action
+        uses: jonhowe/Release-Automator@v0.3.0
         with:
           mode: resume
           repo-path: target

@@ -15,8 +15,8 @@ on:
 permissions:
   actions: read
   checks: read
-  contents: write
-  pull-requests: write
+  statuses: read
+  contents: read
 
 jobs:
   execute:
@@ -65,6 +65,7 @@ jobs:
           state-path: ${{ runner.temp }}/release-automator/state
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_AUTOMATOR_GITHUB_TOKEN }}
+          GITHUB_CHECKS_TOKEN: ${{ github.token }}
 
       - name: Upload resumable state after a failure
         if: failure()

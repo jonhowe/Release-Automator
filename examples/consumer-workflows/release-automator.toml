@@ -1,0 +1,28 @@
+[git]
+branch_prefix = "release-automator/"
+merge_method = "squash"
+delete_remote_branch = true
+delete_local_branch = true
+
+[checks]
+# Replace "ci" with each required check-run name exactly as GitHub displays it.
+required = ["ci"]
+accepted_conclusions = ["success"]
+poll_seconds = 10
+discovery_timeout_seconds = 300
+completion_timeout_seconds = 3600
+allow_no_checks = false
+
+[release]
+enabled_by_default = true
+tag_prefix = "v"
+side_effect_notice = "Publishing a release may trigger repository-specific workflows."
+
+[openai]
+model = "gpt-5.4-mini-2026-03-17"
+max_diff_bytes = 200000
+
+# Add project-specific shell-free validation commands, for example:
+# [[validation]]
+# name = "tests"
+# argv = ["npm", "test"]

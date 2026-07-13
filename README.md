@@ -16,9 +16,9 @@ resumable.
 - `GITHUB_TOKEN`, or an authenticated GitHub CLI (`gh auth login`)
 - Existing Git credentials capable of pushing `origin`
 
-For a fine-grained GitHub token, grant Contents read/write, Pull requests read/write, and Checks
-read access to the target repository. Tokens are read into process memory and are never written
-to plan files or logs.
+For local use, grant a fine-grained GitHub token Contents and Pull requests read/write access to the
+target repository. GitHub Actions can use a separate built-in job token for check/status reads.
+Tokens are read into process memory and are never written to plan files or logs.
 
 ## Install
 
@@ -35,15 +35,17 @@ For a task-oriented walkthrough covering configuration, planning, approval, and 
 
 ## GitHub Action
 
-The repository includes a composite `action.yml` and manual plan, execute, and resume workflows.
+The repository includes a composite `action.yml`, self-release workflows, and copy-ready consumer
+workflows under `examples/consumer-workflows/`.
 Planning produces a portable artifact, prints the entire proposed operation to the job log and job
 summary, and outputs a full frozen plan ID. Execution requires that exact 64-character ID and is
 gated by a protected `release` environment before it can access a write-capable GitHub token.
 
-Store `OPENAI_API_KEY` as a repository Actions secret. Store the scoped
-`RELEASE_AUTOMATOR_GITHUB_TOKEN` as an environment secret on `release`; never place tokens in
-action inputs, variables, TOML, artifacts, or summaries. See the [GitHub Actions guide](docs/github-actions.md)
-for setup, permissions, approval, resume, GitHub App, and fork-safety guidance.
+Create both values in the repository being released: store `OPENAI_API_KEY` as a repository Actions
+secret and the scoped `RELEASE_AUTOMATOR_GITHUB_TOKEN` as an environment secret on `release`. The
+write PAT needs Contents and Pull requests read/write; the workflow's built-in token handles
+check/status reads. See the [GitHub Actions guide](docs/github-actions.md) for PAT creation, consumer
+installation, permissions, approval, resume, GitHub App, and fork-safety guidance.
 
 ## Configure a repository
 
