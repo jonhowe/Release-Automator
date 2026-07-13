@@ -1,0 +1,115 @@
+name: Release Automator
+description: Create, approve, execute, or resume a frozen GitHub publication plan.
+author: Release Automator contributors
+
+inputs:
+  mode:
+    description: "Operation to run: plan, execute, or resume."
+    required: false
+    default: plan
+  repo-path:
+    description: Checked-out target repository.
+    required: false
+    default: .
+  include-paths:
+    description: Newline-delimited changed paths; required for plan mode.
+    required: false
+  config-path:
+    description: Repository-relative TOML configuration path.
+    required: false
+  no-release:
+    description: Set true to stop after merging without creating a release.
+    required: false
+    default: "false"
+  branch:
+    description: Optional branch slug override for plan mode.
+    required: false
+  commit-message:
+    description: Optional commit message override for plan mode.
+    required: false
+  pr-title:
+    description: Optional pull request title override for plan mode.
+    required: false
+  pr-body-file:
+    description: Optional repository-relative pull request body file.
+    required: false
+  version:
+    description: Optional explicit release tag for plan mode.
+    required: false
+  release-channel:
+    description: Optional stable or prerelease override for plan mode.
+    required: false
+  release-notes-file:
+    description: Optional repository-relative release notes file.
+    required: false
+  bundle-path:
+    description: Plan bundle output in plan mode or input in execute/resume mode.
+    required: false
+  markdown-path:
+    description: Optional path for the rendered plan.
+    required: false
+  plan-id:
+    description: Full frozen plan ID; required for execute/resume mode.
+    required: false
+  approved-plan-id:
+    description: Exact 64-character approval; required for execute/resume mode.
+    required: false
+  run-state:
+    description: Persisted run.json input; required for resume mode.
+    required: false
+  repository-bundle:
+    description: Optional Git bundle preserved by a failed earlier run.
+    required: false
+  state-path:
+    description: Directory where resumable failure state is written.
+    required: false
+
+outputs:
+  plan-id:
+    description: Full frozen plan ID.
+    value: ${{ steps.release-automator.outputs.plan-id }}
+  bundle-path:
+    description: Absolute portable plan bundle path.
+    value: ${{ steps.release-automator.outputs.bundle-path }}
+  markdown-path:
+    description: Absolute rendered plan path.
+    value: ${{ steps.release-automator.outputs.markdown-path }}
+  state-path:
+    description: Absolute resumable failure-state directory.
+    value: ${{ steps.release-automator.outputs.state-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install uv
+      uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+      with:
+        python-version: "3.12"
+        enable-cache: true
+
+    - name: Run Release Automator
+      id: release-automator
+      shell: bash
+      env:
+        RELEASE_AUTOMATOR_MODE: ${{ inputs.mode }}
+        RELEASE_AUTOMATOR_REPO_PATH: ${{ inputs.repo-path }}
+        RELEASE_AUTOMATOR_INCLUDE_PATHS: ${{ inputs.include-paths }}
+        RELEASE_AUTOMATOR_CONFIG_PATH: ${{ inputs.config-path }}
+        RELEASE_AUTOMATOR_NO_RELEASE: ${{ inputs.no-release }}
+        RELEASE_AUTOMATOR_BRANCH: ${{ inputs.branch }}
+        RELEASE_AUTOMATOR_COMMIT_MESSAGE: ${{ inputs.commit-message }}
+        RELEASE_AUTOMATOR_PR_TITLE: ${{ inputs.pr-title }}
+        RELEASE_AUTOMATOR_PR_BODY_FILE: ${{ inputs.pr-body-file }}
+        RELEASE_AUTOMATOR_VERSION: ${{ inputs.version }}
+        RELEASE_AUTOMATOR_RELEASE_CHANNEL: ${{ inputs.release-channel }}
+        RELEASE_AUTOMATOR_RELEASE_NOTES_FILE: ${{ inputs.release-notes-file }}
+        RELEASE_AUTOMATOR_BUNDLE_PATH: ${{ inputs.bundle-path }}
+        RELEASE_AUTOMATOR_MARKDOWN_PATH: ${{ inputs.markdown-path }}
+        RELEASE_AUTOMATOR_PLAN_ID: ${{ inputs.plan-id }}
+        RELEASE_AUTOMATOR_APPROVED_PLAN_ID: ${{ inputs.approved-plan-id }}
+        RELEASE_AUTOMATOR_RUN_STATE: ${{ inputs.run-state }}
+        RELEASE_AUTOMATOR_REPOSITORY_BUNDLE: ${{ inputs.repository-bundle }}
+        RELEASE_AUTOMATOR_STATE_PATH: ${{ inputs.state-path }}
+      run: >-
+        uv run --locked --project "$GITHUB_ACTION_PATH"
+        python "$GITHUB_ACTION_PATH/scripts/action_runner.py"

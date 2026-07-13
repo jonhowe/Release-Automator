@@ -92,6 +92,7 @@ def create_plan(
     include: list[Path],
     config: RepoConfig,
     no_release: bool,
+    portable: bool = False,
     overrides: dict[str, Any] | None = None,
     openai_client: Any | None = None,
     github_client: GitHubClient | None = None,
@@ -103,6 +104,7 @@ def create_plan(
     assert_safe_paths(include_paths)
 
     repo_full_name = parse_github_repo(repo.origin_url())
+    public_remote_url = f"https://github.com/{repo_full_name}.git"
     owns_github = github_client is None
     github = github_client or GitHubClient(repo_full_name)
     try:
@@ -168,14 +170,15 @@ def create_plan(
         plan = FrozenPlan(
             repo_root=str(repo.root),
             repo_full_name=repo_full_name,
-            remote_url=repo.origin_url(),
+            remote_url=public_remote_url,
             base_branch=base_branch,
             base_sha=base_sha,
             branch_name=branch_name,
             include_paths=include_paths,
             excluded_paths=excluded_paths,
-            snapshot_hash=repo.snapshot_hash(include_paths),
+            snapshot_hash=repo.snapshot_hash(include_paths, include_mode=portable),
             redacted_secret_types=redacted_secret_types,
+            portable=portable,
             config=config,
             validation_results=safe_validations,
             releases=releases,
@@ -255,6 +258,12 @@ def render_plan(plan: FrozenPlan) -> str:
         )
     else:
         local_cleanup = f"Leave local branch `{plan.branch_name}` checked out after completion."
+    approval_instruction = "Execute it by typing the displayed short plan ID when prompted."
+    if plan.portable:
+        approval_instruction = (
+            "On the execution runner, supply the complete 64-character plan ID through "
+            "`--approved-plan-id`."
+        )
     return f"""# Publication proposal `{plan.plan_id[:12]}`
 
 ## Scope
@@ -278,6 +287,7 @@ Excluded:
 - Branch: `{plan.branch_name}`
 - Commit: `{plan.proposal.commit_message}`
 - Base: `{plan.base_branch}`
+- Portable bundle: `{plan.portable}`
 - Merge method: `{plan.config.git.merge_method}`
 - Delete remote branch: `{plan.config.git.delete_remote_branch}`
 - Required checks: {", ".join(plan.config.checks.required) or "none (explicitly allowed)"}
@@ -315,20 +325,25 @@ them; it will perform these actions in order:
 12. {local_cleanup}
 
 One approval authorizes this exact frozen plan.
-Execute it by typing the short plan ID when prompted.
+{approval_instruction}
 """
 
 
 def _assert_plan_still_matches(repo: GitRepo, plan: FrozenPlan, github: GitHubClient) -> None:
-    if str(repo.root) != plan.repo_root:
+    if not plan.portable and str(repo.root) != plan.repo_root:
         raise PlanDriftError("the plan belongs to a different repository")
+    if parse_github_repo(repo.origin_url()) != plan.repo_full_name:
+        raise PlanDriftError("the plan belongs to a different GitHub repository")
     if repo.current_branch() != plan.base_branch:
         raise PlanDriftError(f"current branch must still be {plan.base_branch}")
     if repo.head_sha() != plan.base_sha:
         raise PlanDriftError("local base HEAD changed after planning")
     if github.branch_sha(plan.base_branch) != plan.base_sha:
         raise PlanDriftError("GitHub base branch changed after planning")
-    if repo.snapshot_hash(plan.include_paths) != plan.snapshot_hash:
+    if (
+        repo.snapshot_hash(plan.include_paths, include_mode=plan.portable)
+        != plan.snapshot_hash
+    ):
         raise PlanDriftError("included files changed after planning")
     repo.assert_no_staged_outside(plan.include_paths)
     if repo.local_branch_exists(plan.branch_name) or github.branch_exists(plan.branch_name):
@@ -356,9 +371,10 @@ def run_plan(
     plan: FrozenPlan,
     state: RunState,
     *,
+    repo_path: Path | None = None,
     github_client: GitHubClient | None = None,
 ) -> RunState:
-    repo = GitRepo(Path(plan.repo_root))
+    repo = GitRepo(repo_path or Path(plan.repo_root))
     store = StateStore(repo)
     owns_github = github_client is None
     github = github_client or GitHubClient(plan.repo_full_name)
@@ -372,7 +388,11 @@ def run_plan(
                         "planned local branch exists but is not currently checked out"
                     )
                 if (
-                    repo.snapshot_hash(plan.include_paths, base_sha=plan.base_sha)
+                    repo.snapshot_hash(
+                        plan.include_paths,
+                        base_sha=plan.base_sha,
+                        include_mode=plan.portable,
+                    )
                     != plan.snapshot_hash
                 ):
                     raise PlanDriftError("included files changed during branch recovery")
@@ -401,6 +421,11 @@ def run_plan(
         if state.phase is Phase.COMMITTED:
             if not state.commit_sha:
                 raise AutomatorError("committed state is missing commit SHA")
+            if (
+                repo.local_branch_exists(plan.branch_name)
+                and repo.branch_sha(plan.branch_name) != state.commit_sha
+            ):
+                raise PlanDriftError("local branch does not match the committed run state")
             remote_sha = (
                 github.branch_sha(plan.branch_name)
                 if github.branch_exists(plan.branch_name)

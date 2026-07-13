@@ -8,9 +8,11 @@ import typer
 from rich.console import Console
 from rich.markdown import Markdown
 
+from release_automator.bundle import export_plan_bundle, import_plan_bundle
 from release_automator.config import load_config
 from release_automator.errors import AutomatorError
-from release_automator.models import ReleaseChannel
+from release_automator.git_ops import GitRepo
+from release_automator.models import FrozenPlan, Phase, ReleaseChannel
 from release_automator.state import StateStore
 from release_automator.workflow import (
     approve_plan,
@@ -30,6 +32,25 @@ console = Console()
 
 def _read_optional(path: Path | None) -> str | None:
     return path.read_text(encoding="utf-8") if path else None
+
+
+def _write_optional(path: Path | None, value: str) -> None:
+    if path is None:
+        return
+    path = path.expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(value, encoding="utf-8")
+
+
+def _confirm_plan(plan: FrozenPlan, approved_plan_id: str | None) -> None:
+    if approved_plan_id is not None:
+        if approved_plan_id != plan.plan_id:
+            raise AutomatorError("non-interactive approval must match the full frozen plan ID")
+        return
+    short_id = plan.plan_id[:12]
+    confirmation = typer.prompt(f"Type {short_id} to approve this exact plan")
+    if confirmation != short_id:
+        raise AutomatorError("approval did not match the frozen plan ID")
 
 
 def _abort(exc: Exception) -> Never:
@@ -71,6 +92,18 @@ def plan_command(
         Path | None,
         typer.Option("--release-notes-file", help="Override release notes from a file."),
     ] = None,
+    bundle_out: Annotated[
+        Path | None,
+        typer.Option("--bundle-out", help="Export a portable plan bundle for another runner."),
+    ] = None,
+    markdown_out: Annotated[
+        Path | None,
+        typer.Option("--markdown-out", help="Write the complete plan as Markdown."),
+    ] = None,
+    plan_id_out: Annotated[
+        Path | None,
+        typer.Option("--plan-id-out", help="Write the full frozen plan ID to a file."),
+    ] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Print JSON.")] = False,
 ) -> None:
     try:
@@ -89,14 +122,20 @@ def plan_command(
             include=include or [],
             config=config,
             no_release=no_release,
+            portable=bundle_out is not None,
             overrides=overrides,
         )
+        if bundle_out is not None:
+            export_plan_bundle(repo, plan, bundle_out)
     except (AutomatorError, OSError, ValueError) as exc:
         _abort(exc)
+    rendered = render_plan(plan)
+    _write_optional(markdown_out, rendered)
+    _write_optional(plan_id_out, f"{plan.plan_id}\n")
     if json_output:
         console.print_json(plan.model_dump_json())
     else:
-        console.print(Markdown(render_plan(plan)))
+        console.print(Markdown(rendered))
         console.print(f"[bold]Plan ID:[/bold] {plan.plan_id}")
 
 
@@ -104,17 +143,35 @@ def plan_command(
 def execute_command(
     plan_id: Annotated[str, typer.Argument(help="Full or unique-prefix frozen plan ID.")],
     repo: Annotated[Path, typer.Option("--repo", help="Target Git repository.")] = Path("."),
+    bundle: Annotated[
+        Path | None,
+        typer.Option("--bundle", help="Import a portable plan bundle before execution."),
+    ] = None,
+    approved_plan_id: Annotated[
+        str | None,
+        typer.Option(
+            "--approved-plan-id",
+            help="Non-interactive approval; must equal the full frozen plan ID.",
+        ),
+    ] = None,
+    markdown_out: Annotated[
+        Path | None,
+        typer.Option("--markdown-out", help="Write the complete plan as Markdown."),
+    ] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Print JSON.")] = False,
 ) -> None:
     try:
-        git_repo, _store, plan = load_plan(repo, plan_id)
-        console.print(Markdown(render_plan(plan)))
-        short_id = plan.plan_id[:12]
-        confirmation = typer.prompt(f"Type {short_id} to approve this exact plan")
-        if confirmation != short_id:
-            raise AutomatorError("approval did not match the frozen plan ID")
+        if bundle is not None:
+            plan = import_plan_bundle(repo, bundle, expected_plan_id=plan_id)
+            git_repo = GitRepo(repo)
+        else:
+            git_repo, _store, plan = load_plan(repo, plan_id)
+        rendered = render_plan(plan)
+        _write_optional(markdown_out, rendered)
+        console.print(Markdown(rendered))
+        _confirm_plan(plan, approved_plan_id)
         state = approve_plan(git_repo, plan)
-        state = run_plan(plan, state)
+        state = run_plan(plan, state, repo_path=git_repo.root)
     except (AutomatorError, OSError, ValueError) as exc:
         _abort(exc)
     if json_output:
@@ -127,12 +184,46 @@ def execute_command(
 def resume_command(
     plan_id: Annotated[str, typer.Argument(help="Full or unique-prefix approved plan ID.")],
     repo: Annotated[Path, typer.Option("--repo", help="Target Git repository.")] = Path("."),
+    bundle: Annotated[
+        Path | None,
+        typer.Option("--bundle", help="Import a portable plan bundle before resuming."),
+    ] = None,
+    run_state: Annotated[
+        Path | None,
+        typer.Option("--run-state", help="Import persisted run state from another runner."),
+    ] = None,
+    repository_bundle: Annotated[
+        Path | None,
+        typer.Option("--repository-bundle", help="Import preserved local Git objects."),
+    ] = None,
+    approved_plan_id: Annotated[
+        str | None,
+        typer.Option(
+            "--approved-plan-id",
+            help="Non-interactive approval; must equal the full frozen plan ID.",
+        ),
+    ] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Print JSON.")] = False,
 ) -> None:
     try:
-        _git_repo, store, plan = load_plan(repo, plan_id)
-        state = store.load_run(plan.plan_id)
-        state = run_plan(plan, state)
+        if bundle is not None:
+            plan = import_plan_bundle(repo, bundle, expected_plan_id=plan_id)
+            git_repo = GitRepo(repo)
+            store = StateStore(git_repo)
+        else:
+            git_repo, store, plan = load_plan(repo, plan_id)
+        if approved_plan_id is not None:
+            _confirm_plan(plan, approved_plan_id)
+        state = (
+            store.import_run(run_state, plan.plan_id)
+            if run_state is not None
+            else store.load_run(plan.plan_id)
+        )
+        if repository_bundle is not None and state.phase is not Phase.PLANNED:
+            source = repository_bundle.expanduser().resolve()
+            target = f"refs/heads/{plan.branch_name}:refs/heads/{plan.branch_name}"
+            git_repo.run(["fetch", str(source), target])
+        state = run_plan(plan, state, repo_path=git_repo.root)
     except (AutomatorError, OSError, ValueError) as exc:
         _abort(exc)
     if json_output:

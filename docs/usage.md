@@ -5,7 +5,7 @@ executes that exact plan after approval. Run it from the target repository's def
 
 ## 1. Prepare credentials
 
-Install dependencies and make the service credentials available to the process:
+For local use, install dependencies and make the service credentials available to the process:
 
 ```bash
 uv sync --locked --all-groups
@@ -15,6 +15,11 @@ gh auth login
 
 The GitHub identity must be able to push branches, open and merge pull requests, read checks, and
 create releases when releases are enabled.
+
+In GitHub Actions, do not use workflow inputs or repository variables for credentials. Store
+`OPENAI_API_KEY` as a repository Actions secret and store `RELEASE_AUTOMATOR_GITHUB_TOKEN` as a
+secret on a protected `release` environment. The latter should be a repository-scoped fine-grained
+PAT or short-lived GitHub App token. See the [GitHub Actions guide](github-actions.md).
 
 ## 2. Define repository policy
 
@@ -75,3 +80,19 @@ uv run --locked release-automator resume --repo . PLAN_ID
 ```
 
 Create a fresh plan if the base branch, selected files, proposed branch, or release tag changes.
+
+## 6. Move a plan between runners
+
+Create a portable bundle while planning, then provide the same full ID as explicit non-interactive
+approval on the clean execution runner:
+
+```bash
+uv run --locked release-automator plan --repo . --config release-automator.toml --include docs \
+  --bundle-out /tmp/plan.zip --plan-id-out /tmp/plan-id.txt
+uv run --locked release-automator execute --repo . FULL_PLAN_ID \
+  --bundle /tmp/plan.zip --approved-plan-id FULL_PLAN_ID
+```
+
+The bundle restores only the frozen included paths and verifies their modes and hashes. Treat it as
+source code: it may contain current private file contents even though prior contents of deleted
+files are omitted.

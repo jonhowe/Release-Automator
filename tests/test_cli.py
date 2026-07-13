@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+import pytest
+
+from release_automator.cli import _confirm_plan
+from release_automator.errors import AutomatorError
+from release_automator.models import ChangeClass, FrozenPlan, ModelProposal, RepoConfig
+
+
+def _plan() -> FrozenPlan:
+    return FrozenPlan(
+        plan_id="a" * 64,
+        repo_root="/tmp/repository",
+        repo_full_name="example/project",
+        remote_url="git@github.com:example/project.git",
+        base_branch="main",
+        base_sha="b" * 40,
+        branch_name="agent/change",
+        include_paths=["feature.py"],
+        excluded_paths=[],
+        snapshot_hash="c" * 64,
+        config=RepoConfig(),
+        validation_results=[],
+        releases=[],
+        release_enabled=False,
+        proposal=ModelProposal(
+            branch_slug="change",
+            commit_message="Apply change",
+            pr_title="Apply change",
+            pr_body="## Summary\n\n- Apply change.",
+            change_class=ChangeClass.INTERNAL,
+        ),
+    )
+
+
+def test_noninteractive_approval_requires_full_plan_id() -> None:
+    plan = _plan()
+    _confirm_plan(plan, plan.plan_id)
+
+    with pytest.raises(AutomatorError, match="full frozen plan ID"):
+        _confirm_plan(plan, plan.plan_id[:12])
+
+    with pytest.raises(AutomatorError, match="full frozen plan ID"):
+        _confirm_plan(plan, "b" * 64)

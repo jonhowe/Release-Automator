@@ -21,3 +21,9 @@ and coordinated disclosure before publishing details.
 
 Never attach real API keys, tokens, private keys, or credential files to an issue or pull request.
 Revoke any credential immediately if it is accidentally disclosed.
+
+For GitHub Actions, store `OPENAI_API_KEY` as a repository secret and place the scoped GitHub write
+token in a protected `release` environment as `RELEASE_AUTOMATOR_GITHUB_TOKEN`. Secrets must enter
+the composite action through environment variables, never action inputs, repository variables,
+artifacts, summaries, or committed configuration. Use required environment reviewers and avoid
+secret-bearing `pull_request_target` workflows. Pin third-party actions to full commit SHAs.
