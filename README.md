@@ -12,7 +12,7 @@ resumable.
 
 - Python 3.12 or newer
 - Git and an `origin` remote hosted on GitHub
-- `OPENAI_API_KEY`
+- `OPENAI_API_KEY` in the process environment or GitHub Actions secrets
 - `GITHUB_TOKEN`, or an authenticated GitHub CLI (`gh auth login`)
 - Existing Git credentials capable of pushing `origin`
 
@@ -32,6 +32,18 @@ normal operation.
 
 For a task-oriented walkthrough covering configuration, planning, approval, and recovery, see the
 [usage guide](docs/usage.md).
+
+## GitHub Action
+
+The repository includes a composite `action.yml` and manual plan, execute, and resume workflows.
+Planning produces a portable artifact, prints the entire proposed operation to the job log and job
+summary, and outputs a full frozen plan ID. Execution requires that exact 64-character ID and is
+gated by a protected `release` environment before it can access a write-capable GitHub token.
+
+Store `OPENAI_API_KEY` as a repository Actions secret. Store the scoped
+`RELEASE_AUTOMATOR_GITHUB_TOKEN` as an environment secret on `release`; never place tokens in
+action inputs, variables, TOML, artifacts, or summaries. See the [GitHub Actions guide](docs/github-actions.md)
+for setup, permissions, approval, resume, GitHub App, and fork-safety guidance.
 
 ## Configure a repository
 
@@ -90,6 +102,9 @@ and release behavior. Execution starts only after the short plan ID is typed exa
 first Git or GitHub mutation, the tool verifies the base SHA, included-file hash, branch, tag, and
 credentials have not drifted.
 
+Automation uses a stricter non-interactive approval: `--approved-plan-id` must match the complete
+64-character plan ID. `--bundle` securely rehydrates a portable plan on a separate runner.
+
 If the process stops after approval, resume without repeating completed GitHub operations:
 
 ```bash
@@ -110,6 +125,8 @@ uv run release-automator resume --repo /path/to/repository PLAN_ID
   stop the workflow.
 - GitHub merge requests include the frozen PR head SHA.
 - A release targets the returned merge SHA, never an inferred local commit.
+- Portable bundles validate repository identity, base SHA, paths, file modes, and content hashes;
+  deleted-file contents are not stored in the bundle.
 - The model is pinned to `gpt-5.4-mini-2026-03-17` by default. Text may still vary between fresh
   plans; determinism begins when a plan is frozen and hashed.
 

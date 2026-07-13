@@ -1,0 +1,117 @@
+name: Plan a release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full 40-character commit SHA containing the changes to plan.
+        required: true
+        type: string
+      include_paths:
+        description: Newline-delimited files or directories to include.
+        required: true
+        type: string
+      config_path:
+        description: Repository-relative Release Automator TOML file.
+        required: true
+        default: examples/python-project.toml
+        type: string
+      no_release:
+        description: Merge without creating a GitHub Release.
+        required: true
+        default: false
+        type: boolean
+      branch:
+        description: Optional branch slug override.
+        required: false
+        type: string
+      commit_message:
+        description: Optional commit message override.
+        required: false
+        type: string
+      pr_title:
+        description: Optional pull request title override.
+        required: false
+        type: string
+      pr_body_file:
+        description: Optional repository-relative pull request body file.
+        required: false
+        type: string
+      version:
+        description: Optional explicit release tag.
+        required: false
+        type: string
+      release_channel:
+        description: Optional stable or prerelease override.
+        required: false
+        type: string
+      release_notes_file:
+        description: Optional repository-relative release notes file.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trusted action code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: .release-automator-action
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Check out the target default branch
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          path: target
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Reconstruct the proposed working tree
+        shell: bash
+        working-directory: target
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "source_sha must be a full 40-character commit SHA" >&2
+            exit 1
+          fi
+          git cat-file -e "${SOURCE_SHA}^{commit}"
+          BASE_SHA="$(git rev-parse HEAD)"
+          git diff --binary "$BASE_SHA" "$SOURCE_SHA" -- . | git apply --whitespace=nowarn
+
+      - name: Create and print the frozen plan
+        id: plan
+        uses: ./.release-automator-action
+        with:
+          mode: plan
+          repo-path: target
+          include-paths: ${{ inputs.include_paths }}
+          config-path: ${{ inputs.config_path }}
+          no-release: ${{ inputs.no_release }}
+          branch: ${{ inputs.branch }}
+          commit-message: ${{ inputs.commit_message }}
+          pr-title: ${{ inputs.pr_title }}
+          pr-body-file: ${{ inputs.pr_body_file }}
+          version: ${{ inputs.version }}
+          release-channel: ${{ inputs.release_channel }}
+          release-notes-file: ${{ inputs.release_notes_file }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Upload the reviewable plan
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-automator-plan-${{ steps.plan.outputs.plan-id }}
+          path: |
+            ${{ steps.plan.outputs.bundle-path }}
+            ${{ steps.plan.outputs.markdown-path }}
+          if-no-files-found: error
+          retention-days: 30

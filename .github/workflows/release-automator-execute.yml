@@ -1,0 +1,76 @@
+name: Execute an approved release plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan_run_id:
+        description: Run ID of the successful Plan a release workflow.
+        required: true
+        type: string
+      plan_id:
+        description: Exact 64-character plan ID printed by the planning run.
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  pull-requests: write
+
+jobs:
+  execute:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Check out trusted action code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: .release-automator-action
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Check out the target with the release credential
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          path: target
+          ref: ${{ github.event.repository.default_branch }}
+          token: ${{ secrets.RELEASE_AUTOMATOR_GITHUB_TOKEN }}
+
+      - name: Download the frozen plan
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-automator-plan-${{ inputs.plan_id }}
+          path: ${{ runner.temp }}/release-automator/plan
+          run-id: ${{ inputs.plan_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Configure the commit identity
+        shell: bash
+        working-directory: target
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Execute the exact approved plan
+        id: execute
+        uses: ./.release-automator-action
+        with:
+          mode: execute
+          repo-path: target
+          bundle-path: ${{ runner.temp }}/release-automator/plan/plan.zip
+          plan-id: ${{ inputs.plan_id }}
+          approved-plan-id: ${{ inputs.plan_id }}
+          state-path: ${{ runner.temp }}/release-automator/state
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_AUTOMATOR_GITHUB_TOKEN }}
+
+      - name: Upload resumable state after a failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-automator-state-${{ inputs.plan_id }}
+          path: ${{ runner.temp }}/release-automator/state
+          if-no-files-found: warn
+          retention-days: 30

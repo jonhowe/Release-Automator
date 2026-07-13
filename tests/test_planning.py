@@ -165,3 +165,28 @@ def test_plan_redacts_secret_like_diff_before_model_request(git_repository: Path
     assert token not in str(client.responses.last_kwargs)
     assert "<REDACTED GITHUB TOKEN>" in str(client.responses.last_kwargs)
     assert "Redacted from OpenAI input: `GitHub token`" in render_plan(plan)
+
+
+def test_plan_does_not_persist_remote_credentials(git_repository: Path) -> None:
+    credential = "github_pat_credential-value"
+    run_git(
+        git_repository,
+        "remote",
+        "set-url",
+        "origin",
+        f"https://x-access-token:{credential}@github.com/example/project.git",
+    )
+    (git_repository / "feature.py").write_text("enabled = True\n", encoding="utf-8")
+    base_sha = run_git(git_repository, "rev-parse", "HEAD")
+
+    plan = create_plan(
+        repo_path=git_repository,
+        include=[Path("feature.py")],
+        config=RepoConfig(checks=ChecksConfig(required=["ci"])),
+        no_release=False,
+        openai_client=FakeOpenAI(),
+        github_client=FakeGitHub(base_sha),  # type: ignore[arg-type]
+    )
+
+    assert plan.remote_url == "https://github.com/example/project.git"
+    assert credential not in plan.model_dump_json()

@@ -22,10 +22,14 @@ class StateStore:
     def calculate_plan_id(plan: FrozenPlan) -> str:
         values = plan.model_dump(mode="json")
         values["plan_id"] = ""
+        for optional_field in ("redacted_secret_types", "portable"):
+            if optional_field not in plan.model_fields_set:
+                values.pop(optional_field, None)
         encoded = json.dumps(values, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(encoded).hexdigest()
 
     def save_plan(self, plan: FrozenPlan) -> FrozenPlan:
+        plan.model_fields_set.update({"redacted_secret_types", "portable"})
         plan.plan_id = self.calculate_plan_id(plan)
         self.plans.mkdir(parents=True, exist_ok=True)
         path = self.plans / f"{plan.plan_id}.json"
@@ -68,6 +72,16 @@ class StateStore:
             return RunState.model_validate_json(path.read_text(encoding="utf-8"))
         except (OSError, ValidationError) as exc:
             raise AutomatorError(f"could not load run state: {exc}") from exc
+
+    def import_run(self, path: Path, plan_id: str) -> RunState:
+        try:
+            state = RunState.model_validate_json(path.read_text(encoding="utf-8"))
+        except (OSError, ValidationError) as exc:
+            raise AutomatorError(f"could not import run state: {exc}") from exc
+        if state.plan_id != plan_id:
+            raise AutomatorError("run state does not match the frozen plan")
+        self.save_run(state)
+        return state
 
     def has_run(self, plan_id: str) -> bool:
         return (self.runs / f"{plan_id}.json").exists()

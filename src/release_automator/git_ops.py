@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import stat
 import subprocess
 from pathlib import Path, PurePosixPath
 
@@ -115,7 +116,13 @@ class GitRepo:
     def excluded_paths(self, include_paths: list[str]) -> list[str]:
         return sorted(set(self.changed_paths()) - set(include_paths))
 
-    def snapshot_hash(self, include_paths: list[str], *, base_sha: str | None = None) -> str:
+    def snapshot_hash(
+        self,
+        include_paths: list[str],
+        *,
+        base_sha: str | None = None,
+        include_mode: bool = False,
+    ) -> str:
         digest = hashlib.sha256()
         digest.update((base_sha or self.head_sha()).encode())
         for path_text in sorted(include_paths):
@@ -127,6 +134,8 @@ class GitRepo:
                 digest.update(os.readlink(path).encode())
             elif path.is_file():
                 digest.update(b"\0FILE\0")
+                if include_mode:
+                    digest.update(f"\0MODE\0{stat.S_IMODE(path.stat().st_mode):03o}".encode())
                 digest.update(path.read_bytes())
             elif not path.exists():
                 digest.update(b"\0DELETED\0")

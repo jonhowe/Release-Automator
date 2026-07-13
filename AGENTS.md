@@ -4,10 +4,11 @@
 
 Release Automator is a Python 3.12 CLI with a `src/` layout. Application code lives in
 `src/release_automator/`; `cli.py` defines Typer commands, `workflow.py` coordinates planning and
-execution, and the `git_ops.py`, `github_api.py`, `security.py`, and `state.py` modules isolate
-side effects. Tests mirror these responsibilities under `tests/` using `test_<area>.py` files.
+execution, and supporting modules isolate side effects. Tests live under `tests/` as
+`test_<area>.py` files.
 Repository configuration examples belong in `examples/`, while CI is defined in
-`.github/workflows/tests.yml`.
+`.github/workflows/`. The composite action is `action.yml`; its non-shelling adapter lives in
+`scripts/action_runner.py`, and operational documentation lives in `docs/`.
 
 ## Build, Test, and Development Commands
 
@@ -18,16 +19,14 @@ Repository configuration examples belong in `examples/`, while CI is defined in
 - `uv run --locked ruff check .` checks imports, style, and common correctness issues.
 - `uv run --locked pyright` performs standard-mode type checking across `src/` and `tests/`.
 
-Run all three quality checks before opening a pull request. Keep `uv.lock` synchronized when
-changing dependencies in `pyproject.toml`.
+Run all three quality checks before opening a pull request. Update `uv.lock` with dependency changes.
 
 ## Coding Style & Naming Conventions
 
 Use four-space indentation, Python 3.12 syntax, explicit type annotations, and a 100-character line
 limit. Ruff enforces `E`, `F`, `I`, `UP`, `B`, and `SIM` rules. Name modules and functions in
 `snake_case`, classes in `PascalCase`, and constants in `UPPER_SNAKE_CASE`. Keep CLI presentation
-separate from Git, GitHub, persistence, and validation logic. Prefer small functions and typed
-Pydantic models for data crossing module boundaries.
+separate from Git, GitHub, persistence, and validation logic. Use typed Pydantic boundary models.
 
 ## Testing Guidelines
 
@@ -49,4 +48,5 @@ pass.
 
 Never commit `.env` files, tokens, private keys, generated plan state, or credentials. Preserve the
 explicit-include, frozen-plan, and approval boundaries when changing workflow code. Validation
-commands in TOML are argument arrays, not shell strings; keep them shell-free.
+commands in TOML are argument arrays, not shell strings; keep them shell-free. GitHub Actions
+credentials belong in named repository or protected-environment secrets, never action inputs.

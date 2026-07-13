@@ -116,6 +116,7 @@ class FrozenPlan(StrictModel):
     excluded_paths: list[str]
     snapshot_hash: str
     redacted_secret_types: list[str] = Field(default_factory=list)
+    portable: bool = False
     config: RepoConfig
     validation_results: list[ValidationResult]
     releases: list[ReleaseInfo]
