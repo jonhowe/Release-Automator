@@ -22,10 +22,12 @@ class Clock:
 def test_wait_for_delayed_check() -> None:
     clock = Clock()
     calls = 0
+    read_authorizations: list[str | None] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal calls
         if request.url.path.endswith("/check-runs"):
+            read_authorizations.append(request.headers.get("Authorization"))
             calls += 1
             checks = []
             if calls == 2:
@@ -34,12 +36,14 @@ def test_wait_for_delayed_check() -> None:
                 checks = [{"name": "ci", "status": "completed", "conclusion": "success"}]
             return httpx.Response(200, json={"check_runs": checks})
         if request.url.path.endswith("/status"):
+            read_authorizations.append(request.headers.get("Authorization"))
             return httpx.Response(200, json={"statuses": []})
         raise AssertionError(request.url)
 
     client = GitHubClient(
         "example/project",
         token="test",
+        checks_token="checks-read",
         transport=httpx.MockTransport(handler),
         sleep=clock.sleep,
         monotonic=clock.monotonic,
@@ -54,6 +58,7 @@ def test_wait_for_delayed_check() -> None:
         ),
     )
     assert result == {"ci": "success"}
+    assert set(read_authorizations) == {"Bearer checks-read"}
 
 
 def test_merge_is_protected_by_head_sha() -> None:

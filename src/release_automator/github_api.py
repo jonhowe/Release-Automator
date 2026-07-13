@@ -42,6 +42,7 @@ class GitHubClient:
         repo_full_name: str,
         *,
         token: str | None = None,
+        checks_token: str | None = None,
         base_url: str | None = None,
         transport: httpx.BaseTransport | None = None,
         sleep: Callable[[float], None] = time.sleep,
@@ -49,6 +50,9 @@ class GitHubClient:
     ) -> None:
         self.repo_full_name = repo_full_name
         self.owner, self.repo = repo_full_name.split("/", 1)
+        self.checks_token = (
+            checks_token or os.environ.get("GITHUB_CHECKS_TOKEN", "").strip() or None
+        )
         self.sleep = sleep
         self.monotonic = monotonic
         root = (base_url or os.environ.get("GITHUB_API_URL") or "https://api.github.com").rstrip(
@@ -60,7 +64,7 @@ class GitHubClient:
                 "Accept": "application/vnd.github+json",
                 "Authorization": f"Bearer {token or resolve_github_token()}",
                 "X-GitHub-Api-Version": GITHUB_API_VERSION,
-                "User-Agent": "release-automator/0.1.0",
+                "User-Agent": "release-automator/0.3.0",
             },
             timeout=30,
             transport=transport,
@@ -200,10 +204,14 @@ class GitHubClient:
         return self._request("GET", f"/repos/{self.repo_full_name}/pulls/{number}").json()
 
     def _check_states(self, sha: str) -> dict[str, tuple[str, str | None, str | None]]:
+        headers = (
+            {"Authorization": f"Bearer {self.checks_token}"} if self.checks_token else None
+        )
         checks_data = self._request(
             "GET",
             f"/repos/{self.repo_full_name}/commits/{sha}/check-runs",
             params={"per_page": 100, "filter": "latest"},
+            headers=headers,
         ).json()
         states: dict[str, tuple[str, str | None, str | None]] = {}
         for check in checks_data.get("check_runs", []):
@@ -214,7 +222,9 @@ class GitHubClient:
             )
 
         status_data = self._request(
-            "GET", f"/repos/{self.repo_full_name}/commits/{sha}/status"
+            "GET",
+            f"/repos/{self.repo_full_name}/commits/{sha}/status",
+            headers=headers,
         ).json()
         for status in status_data.get("statuses", []):
             context = status["context"]
