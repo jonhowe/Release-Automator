@@ -47,6 +47,19 @@ write PAT needs Contents and Pull requests read/write; the workflow's built-in t
 check/status reads. See the [GitHub Actions guide](docs/github-actions.md) for PAT creation, consumer
 installation, permissions, approval, resume, GitHub App, and fork-safety guidance.
 
+### Use it in another repository
+
+1. Copy the three workflow templates into the target repository's `.github/workflows/` directory
+   and copy the example `release-automator.toml` to its root.
+2. Replace `checks.required = ["ci"]` with the target repository's exact required check-run names.
+3. In the target repository, add `OPENAI_API_KEY` as a repository secret and create a `release`
+   environment containing `RELEASE_AUTOMATOR_GITHUB_TOKEN`.
+4. Commit the setup to the default branch, then run **Plan a release** from its Actions tab.
+
+The [consumer quick start](docs/github-actions.md#consumer-quick-start) provides copy commands,
+example workflow inputs, approval steps, and troubleshooting. Nothing needs to be configured in
+the Release-Automator repository.
+
 ## Configure a repository
 
 Copy `examples/python-project.toml` and adjust its validation commands, required GitHub check names,
