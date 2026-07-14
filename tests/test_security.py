@@ -11,14 +11,32 @@ from release_automator.security import (
 )
 
 
-@pytest.mark.parametrize("path", [".env", "config/prod.pem", "secrets/id_rsa"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".env",
+        ".env.production",
+        ".env.example.bak",
+        "config/prod.pem",
+        "secrets/id_rsa",
+    ],
+)
 def test_sensitive_paths_are_blocked(path: str) -> None:
     with pytest.raises(AutomatorError):
         assert_safe_paths([path])
 
 
-def test_example_environment_file_is_allowed() -> None:
-    assert_safe_paths([".env.example"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".env.example",
+        ".env.sample",
+        ".env.docker.example",
+        "config/.env.production.sample",
+    ],
+)
+def test_example_environment_file_is_allowed(path: str) -> None:
+    assert_safe_paths([path])
 
 
 @pytest.mark.parametrize(
