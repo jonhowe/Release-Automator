@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 from typer.testing import CliRunner
 
 from release_automator.cli import _confirm_plan, app
 from release_automator.errors import AutomatorError
 from release_automator.models import ChangeClass, FrozenPlan, ModelProposal, RepoConfig
+
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 def _plan() -> FrozenPlan:
@@ -49,4 +53,4 @@ def test_plan_help_includes_no_latest() -> None:
     result = CliRunner().invoke(app, ["plan", "--help"])
 
     assert result.exit_code == 0
-    assert "--no-latest" in result.stdout
+    assert "--no-latest" in ANSI_ESCAPE_RE.sub("", result.stdout)
