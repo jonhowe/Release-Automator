@@ -19,6 +19,9 @@ def resolve_github_token() -> str:
     token = os.environ.get("GITHUB_TOKEN", "").strip()
     if token:
         return token
+    token = os.environ.get("GH_TOKEN", "").strip()
+    if token:
+        return token
     try:
         result = subprocess.run(
             ["gh", "auth", "token"],
@@ -28,7 +31,8 @@ def resolve_github_token() -> str:
         )
     except (FileNotFoundError, subprocess.CalledProcessError) as exc:
         raise AutomatorError(
-            "set GITHUB_TOKEN or authenticate GitHub CLI with `gh auth login`"
+            "set GITHUB_TOKEN or GH_TOKEN, or provide an existing non-interactive GitHub CLI "
+            "credential"
         ) from exc
     token = result.stdout.strip()
     if not token:

@@ -49,3 +49,13 @@ Never commit `.env` files, tokens, private keys, generated plan state, or creden
 explicit-include, frozen-plan, and approval boundaries when changing workflow code. Validation
 commands in TOML are argument arrays, not shell strings; keep them shell-free. GitHub Actions
 credentials belong in named repository or protected-environment secrets, never action inputs.
+
+## Browser-Free Operations
+
+Release Automator must remain fully operable without a web browser. Codex and other agents must use
+repository files, Git, the `gh` CLI, and documented REST APIs; do not use browser-control tools,
+`gh --web`, a bare `gh auth login`, or UI-only setup and approval instructions. Credentials and Git
+push authentication are pre-provisioned inputs. If a required credential, permission, or explicit
+plan approval is unavailable through the supported CLI/API path, stop and request it rather than
+opening or automating a browser. Browser-free operation does not relax the requirement that a human
+review and explicitly confirm the complete frozen plan ID before execution is dispatched.

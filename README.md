@@ -13,12 +13,14 @@ resumable.
 - Python 3.12 or newer
 - Git and an `origin` remote hosted on GitHub
 - `OPENAI_API_KEY` in the process environment or GitHub Actions secrets
-- `GITHUB_TOKEN`, or an authenticated GitHub CLI (`gh auth login`)
+- A pre-provisioned `GITHUB_TOKEN` or `GH_TOKEN`, or an existing non-interactive `gh` credential
 - Existing Git credentials capable of pushing `origin`
 
 For local use, grant a fine-grained GitHub token Contents and Pull requests read/write access to the
 target repository. GitHub Actions can use a separate built-in job token for check/status reads.
-Tokens are read into process memory and are never written to plan files or logs.
+Tokens are read into process memory and are never written to plan files or logs. Release Automator
+does not launch a browser or initiate an interactive authentication flow when credentials are
+missing.
 
 ## Install
 
@@ -39,26 +41,27 @@ The repository includes a composite `action.yml`, self-release workflows, and co
 workflows under `examples/consumer-workflows/`.
 Planning produces a portable artifact, prints the entire proposed operation to the job log and job
 summary, and outputs a full frozen plan ID. Execution requires that exact 64-character ID and is
-gated by a protected `release` environment before it can access a write-capable GitHub token.
+given a write-capable GitHub token only through the named `release` environment. Optional required
+reviewers can add a second, API-approved environment gate.
 
 Create both values in the repository being released: store `OPENAI_API_KEY` as a repository Actions
 secret and the scoped `RELEASE_AUTOMATOR_GITHUB_TOKEN` as an environment secret on `release`. The
-write PAT needs Contents and Pull requests read/write; the workflow's built-in token handles
-check/status reads. See the [GitHub Actions guide](docs/github-actions.md) for PAT creation, consumer
-installation, permissions, approval, resume, GitHub App, and fork-safety guidance.
+write token needs Contents and Pull requests read/write; the workflow's built-in token handles
+check/status reads. See the [GitHub Actions guide](docs/github-actions.md) for the fully headless
+setup, permission, dispatch, approval, and recovery runbook.
 
 ### Use it in another repository
 
 1. Copy the three workflow templates into the target repository's `.github/workflows/` directory
    and copy the example `release-automator.toml` to its root.
 2. Replace `checks.required = ["ci"]` with the target repository's exact required check-run names.
-3. In the target repository, add `OPENAI_API_KEY` as a repository secret and create a `release`
-   environment containing `RELEASE_AUTOMATOR_GITHUB_TOKEN`.
-4. Commit the setup to the default branch, then run **Plan a release** from its Actions tab.
+3. Use `gh api` and `gh secret set` to create the `release` environment and load `OPENAI_API_KEY`
+   and `RELEASE_AUTOMATOR_GITHUB_TOKEN` from pre-provisioned values.
+4. Commit the setup to the default branch, then dispatch the planning workflow through `gh api`.
 
-The [consumer quick start](docs/github-actions.md#consumer-quick-start) provides copy commands,
-example workflow inputs, approval steps, and troubleshooting. Nothing needs to be configured in
-the Release-Automator repository.
+The [consumer quick start](docs/github-actions.md#consumer-quick-start) provides copy-ready API and
+CLI commands, exact-ID approval steps, and troubleshooting. Nothing needs to be configured in the
+Release-Automator repository.
 
 ## Configure a repository
 

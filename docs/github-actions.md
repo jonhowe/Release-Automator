@@ -1,13 +1,42 @@
-# GitHub Actions
+# GitHub Actions: Fully Headless Runbook
 
 Release Automator ships a composite action and copy-ready plan, execute, and resume workflows.
-Planning prints the branch, commit, pull request, checks, merge, cleanup, and release manifest. The
-write phase accepts only the exact 64-character frozen plan ID and can wait at a protected
-environment.
+Every supported operation is available through Git, the `gh` CLI, or GitHub's REST API. No setup,
+dispatch, review, approval, or recovery step requires a web browser.
+
+The supported workflow begins after GitHub, OpenAI, and Git push credentials have been provisioned
+by a password manager, CI secret store, or authorized operator. Release Automator never mints a
+credential or starts an interactive authentication flow.
+
+## Credential and permission contract
+
+Load secrets into the shell without putting their values in command arguments or shell history.
+The commands below expect these variables to exist:
+
+```bash
+: "${GH_REPO:?set GH_REPO to owner/repository}"
+: "${GH_TOKEN:?inject the operator GitHub token}"
+: "${OPENAI_API_KEY:?inject the OpenAI API key}"
+: "${RELEASE_AUTOMATOR_GITHUB_TOKEN:?inject the release GitHub token}"
+```
+
+`GH_TOKEN` is the control-plane credential used by `gh`. Keep it separate from the token stored for
+release execution.
+
+| Credential | Required access | Purpose |
+| --- | --- | --- |
+| `GH_TOKEN` | Actions read/write and Contents read; Secrets, Environments, and Administration write during initial setup | Creates the environment and secrets, dispatches workflows, and reads runs and artifacts. |
+| `OPENAI_API_KEY` | OpenAI API access | Plans publication metadata only. |
+| `RELEASE_AUTOMATOR_GITHUB_TOKEN` | Contents and Pull requests read/write; Workflows read/write only when a planned change includes workflow files | Pushes, opens and merges the PR, deletes the branch, and creates the release. |
+| `REVIEWER_GH_TOKEN` | Actions read, Deployments write, and/or Pull requests write | Optional distinct identity for environment or PR approval. |
+
+The workflows use `${{ github.token }}` for artifact and check/status reads inside their jobs. That
+built-in token is not a value the operator creates or stores.
 
 ## Consumer quick start
 
-Run these commands from the root of the repository you want Release Automator to operate on:
+Run the following commands from the target repository. They copy the workflows and configuration;
+review the downloaded files before committing them.
 
 ```bash
 mkdir -p .github/workflows
@@ -17,94 +46,64 @@ curl -fsSL https://raw.githubusercontent.com/jonhowe/Release-Automator/v0.3.0/ex
 curl -fsSL https://raw.githubusercontent.com/jonhowe/Release-Automator/v0.3.0/examples/consumer-workflows/release-automator.toml -o release-automator.toml
 ```
 
-Then:
+Replace `checks.required = ["ci"]` with every required check-run name exactly as GitHub reports it.
+Add project validation commands as argument arrays. For production, replace the action tag in each
+workflow with the verified full commit SHA behind that release.
 
-1. Edit `release-automator.toml`. Replace `checks.required = ["ci"]` with the exact check-run names
-   shown on that repository's pull requests. Add project validation commands if desired.
-2. Create the two secrets and `release` environment described below in the target repository.
-3. Commit these four files to the target repository's default branch. Manual Actions workflows do
-   not appear in the Actions tab until their workflow files exist on the default branch.
-4. Push the change you want to release to a branch in the same repository and copy its full SHA with
-   `git rev-parse HEAD`.
-5. Run **Plan a release** with that SHA, newline-delimited changed paths, and
-   `release-automator.toml`. Review the complete manifest and copy its run ID and 64-character plan
-   ID into **Execute an approved release plan**.
-6. If required reviewers are enabled, approve the `release` environment job. The action creates the
-   branch, commit, PR, merge, and optional release only after the execute workflow receives the
-   exact plan ID and any configured environment approval.
+Create the `release` environment with no required reviewer. In this default configuration, the
+human's exact-plan-ID dispatch is the approval boundary.
 
-The public action works from public or private target repositories, subject to the target account's
-Actions policy. An organization that restricts third-party actions must allow
-`jonhowe/Release-Automator`. GitHub Free supports environment secrets only for public repositories;
-private or internal repositories require a plan that supports environment secrets. Required
-environment reviewers on GitHub Free, Pro, and Team are available only for public repositories.
+```bash
+gh api --method PUT \
+  -H 'X-GitHub-Api-Version: 2026-03-10' \
+  'repos/{owner}/{repo}/environments/release' \
+  -F wait_timer=0 \
+  -F prevent_self_review=false \
+  -F 'reviewers[]' \
+  -F deployment_branch_policy=null \
+  --silent
 
-## Configure the target repository
+printf '%s' "$OPENAI_API_KEY" |
+  gh secret set OPENAI_API_KEY --repo "$GH_REPO"
+printf '%s' "$RELEASE_AUTOMATOR_GITHUB_TOKEN" |
+  gh secret set RELEASE_AUTOMATOR_GITHUB_TOKEN --repo "$GH_REPO" --env release
+unset OPENAI_API_KEY RELEASE_AUTOMATOR_GITHUB_TOKEN
 
-Configure everything below in the repository being released—for example, `your-org/your-repo`—not
-in Release-Automator. GitHub environments and their secrets are repository-specific.
-
-There are two secret values to create. `release` is an environment, not a third secret.
-
-| Name | Target-repository location | Purpose |
-| --- | --- | --- |
-| `OPENAI_API_KEY` | Repository Actions secret | Used only while planning metadata. |
-| `RELEASE_AUTOMATOR_GITHUB_TOKEN` | `release` environment secret | Pushes, opens and merges the PR, deletes the branch, and creates the release. |
-
-The workflows also use `${{ github.token }}` to download artifacts and read check runs and commit
-statuses. GitHub creates this token for each job; you do not create or store it. The workflow grants
-it `actions: read`, `checks: read`, `statuses: read`, and `contents: read` only.
-
-## Create the fine-grained PAT
-
-Open GitHub **Settings → Developer settings → Personal access tokens → Fine-grained tokens**, then:
-
-1. Choose the account that owns the target repository as the resource owner and set an expiration.
-2. Under **Repository access**, select **Only select repositories** and choose the target repository.
-3. Under **Repository permissions**, grant **Contents: Read and write** and **Pull requests: Read and
-   write**. Add **Workflows: Read and write** only if a planned change may modify `.github/workflows/`.
-4. Generate the token, copy the `github_pat_...` value, and save it as the environment secret below.
-
-The PAT does not need a **Checks** or **Commit statuses** selection. Release Automator v0.3 reads
-those through the separate built-in job token.
-
-## Create the approval boundary
-
-In the target repository, open **Settings → Environments → New environment**, name it `release`, and
-add `RELEASE_AUTOMATOR_GITHUB_TOKEN` under **Environment secrets**. Add required reviewers when your
-GitHub plan supports them. A solo maintainer should not enable **Prevent self-review** unless another
-reviewer can approve the job.
-
-GitHub withholds the write PAT until the execute or resume job receives environment approval.
-Reviewers should compare the planning run's full plan ID and manifest before approving it.
-
-## Install the consumer workflows
-
-Copy the contents of `examples/consumer-workflows/` into the target repository:
-
-```text
-.github/workflows/release-automator-plan.yml
-.github/workflows/release-automator-execute.yml
-.github/workflows/release-automator-resume.yml
-release-automator.toml
+gh secret list --repo "$GH_REPO"
+gh secret list --repo "$GH_REPO" --env release
 ```
 
-The templates call `jonhowe/Release-Automator@v0.3.0`. For production, replace the tag with the full
-commit SHA behind that release after verifying it. Adjust `release-automator.toml`, especially
-`checks.required`: each entry must exactly match a check-run name shown on the target repository's
-pull requests. Add project-specific validation commands as argument arrays.
+Commit the workflow files and configuration to the target repository's default branch. GitHub only
+accepts a `workflow_dispatch` request for a workflow present on that branch.
 
-The workflows committed under this repository's own `.github/workflows/` release
-Release-Automator itself. The consumer templates omit that self-checkout and operate on the
-repository in which they are installed.
+## Optional protected-environment reviewer
 
-## Plan, approve, and recover
+Repositories whose GitHub plan supports required environment reviewers can configure one through
+the environment API. This adds a second approval after the exact-plan-ID dispatch.
 
-Run **Plan a release** from the target repository's Actions tab with a full source commit SHA and
-newline-delimited paths. Planning reconstructs that diff on the default branch, validates it, prints
-the frozen plan, and uploads a 30-day artifact. It does not write to the repository.
+```bash
+: "${REVIEWER_LOGIN:?set the authorized GitHub reviewer login}"
+REVIEWER_ID=$(gh api "users/$REVIEWER_LOGIN" --jq .id)
 
-Example inputs for a first run:
+gh api --method PUT \
+  -H 'X-GitHub-Api-Version: 2026-03-10' \
+  'repos/{owner}/{repo}/environments/release' \
+  -F wait_timer=0 \
+  -F prevent_self_review=true \
+  -F 'reviewers[][type]=User' \
+  -F "reviewers[][id]=$REVIEWER_ID" \
+  -F deployment_branch_policy=null \
+  --silent
+```
+
+When self-review is prevented, the reviewer credential must represent a different authorized user
+from the identity that dispatched the workflow.
+
+## Dispatch and review a plan
+
+Push the source commit to the target repository, then set the full commit SHA and newline-delimited
+paths. The API's `return_run_details` option makes dispatch return the exact run ID, avoiding any
+ambiguous search for the newest run.
 
 | Input | Example | Notes |
 | --- | --- | --- |
@@ -115,27 +114,175 @@ Example inputs for a first run:
 | `no_latest` | `false` | Set `true` to create a stable release without marking it latest. |
 | `version` | `v1.2.3` | Optional explicit SemVer tag; otherwise OpenAI proposes one. |
 
-The planning run ID is the number in its URL: `.../actions/runs/RUN_ID`. The plan ID is the full
-64-character value printed in the log and job summary. Both values are required by the execute
-workflow; the execute workflow does not accept a shortened plan ID.
+```bash
+SOURCE_SHA=$(git rev-parse HEAD)
+INCLUDE_PATHS=$'src\nREADME.md'
+DEFAULT_BRANCH=$(gh repo view "$GH_REPO" --json defaultBranchRef --jq .defaultBranchRef.name)
 
-After review, run **Execute an approved release plan** with the planning run ID and exact full plan
-ID. Approve the `release` environment gate. If execution fails after approval, run **Resume a release
-plan** with the plan run ID, failed run ID, and the same plan ID.
+PLAN_RUN_ID=$(
+  gh api --method POST \
+    -H 'X-GitHub-Api-Version: 2022-11-28' \
+    'repos/{owner}/{repo}/actions/workflows/release-automator-plan.yml/dispatches' \
+    -f ref="$DEFAULT_BRANCH" \
+    -F return_run_details=true \
+    -f "inputs[source_sha]=$SOURCE_SHA" \
+    -f "inputs[include_paths]=$INCLUDE_PATHS" \
+    -f 'inputs[config_path]=release-automator.toml' \
+    -F 'inputs[no_release]=false' \
+    -F 'inputs[no_latest]=false' \
+    --jq .workflow_run_id
+)
+printf 'Plan run ID: %s\n' "$PLAN_RUN_ID"
+```
 
-Repository rules still apply. Required checks should be listed in `checks.required`. If the target
-branch requires human PR approval, execution will normally stop after creating the PR because it
-cannot approve its own new PR. Approve the generated PR, then use **Resume a release plan** so
-completed work is not repeated.
+Optional plan inputs such as `branch`, `version`, or `release_channel` use the same
+`inputs[name]=value` form.
 
-Do not use `secrets: inherit`, trigger secret-bearing jobs with `pull_request_target`, or plan an
-unreviewed commit. Configured validation commands execute proposed repository code. Portable bundles
-contain included file bytes and must follow the target repository's confidentiality policy.
+This shell function waits through the run API and returns failure unless the conclusion is
+`success`:
+
+```bash
+wait_for_run() {
+  local run_id=$1 status conclusion
+  while :; do
+    status=$(gh api "repos/{owner}/{repo}/actions/runs/$run_id" --jq .status)
+    if [ "$status" = completed ]; then
+      conclusion=$(gh api "repos/{owner}/{repo}/actions/runs/$run_id" --jq .conclusion)
+      [ "$conclusion" = success ]
+      return
+    fi
+    sleep 5
+  done
+}
+
+wait_for_run "$PLAN_RUN_ID"
+```
+
+Get the artifact name from that exact run, derive and validate the full plan ID, and download the
+reviewable Markdown and portable bundle:
+
+```bash
+ARTIFACT_NAME=$(
+  gh api "repos/{owner}/{repo}/actions/runs/$PLAN_RUN_ID/artifacts" \
+    --jq '.artifacts[] | select(.name | startswith("release-automator-plan-")) | .name'
+)
+PLAN_ID=${ARTIFACT_NAME#release-automator-plan-}
+
+if [ "${#PLAN_ID}" -ne 64 ]; then
+  printf 'invalid plan ID from artifact: %s\n' "$PLAN_ID" >&2
+  exit 1
+fi
+case "$PLAN_ID" in
+  *[!0-9a-f]*) printf 'plan ID is not lowercase hexadecimal\n' >&2; exit 1 ;;
+esac
+
+PLAN_DIR=$(mktemp -d)
+gh run download "$PLAN_RUN_ID" \
+  --repo "$GH_REPO" \
+  --name "$ARTIFACT_NAME" \
+  --dir "$PLAN_DIR"
+cat "$PLAN_DIR/plan.md"
+```
+
+Review the entire Markdown manifest, including its complete plan ID, scope, validations, PR
+metadata, release behavior, and ordered side effects. A Codex agent must present this manifest and
+receive explicit human confirmation of the complete ID; it must never infer approval from the plan
+it created.
+
+## Approve and dispatch execution
+
+The approving human must type the complete ID rather than copying it automatically from `PLAN_ID`:
+
+```bash
+printf 'Type the complete plan ID to approve: '
+IFS= read -r APPROVED_PLAN_ID
+if [ "$APPROVED_PLAN_ID" != "$PLAN_ID" ]; then
+  printf 'approval does not match the frozen plan\n' >&2
+  exit 1
+fi
+
+EXECUTE_RUN_ID=$(
+  gh api --method POST \
+    -H 'X-GitHub-Api-Version: 2022-11-28' \
+    'repos/{owner}/{repo}/actions/workflows/release-automator-execute.yml/dispatches' \
+    -f ref="$DEFAULT_BRANCH" \
+    -F return_run_details=true \
+    -f "inputs[plan_run_id]=$PLAN_RUN_ID" \
+    -f "inputs[plan_id]=$APPROVED_PLAN_ID" \
+    --jq .workflow_run_id
+)
+printf 'Execute run ID: %s\n' "$EXECUTE_RUN_ID"
+```
+
+Without required environment reviewers, call `wait_for_run "$EXECUTE_RUN_ID"`. With reviewers,
+the job waits before receiving the release credential.
+
+## Approve a pending environment through the API
+
+Use the distinct reviewer credential only after that reviewer has checked the full plan ID and
+manifest:
+
+```bash
+: "${REVIEWER_GH_TOKEN:?inject the authorized reviewer token}"
+ENVIRONMENT_ID=$(
+  GH_TOKEN="$REVIEWER_GH_TOKEN" gh api \
+    "repos/{owner}/{repo}/actions/runs/$EXECUTE_RUN_ID/pending_deployments" \
+    --jq '.[] | select(.environment.name == "release") | .environment.id'
+)
+
+GH_TOKEN="$REVIEWER_GH_TOKEN" gh api --method POST \
+  "repos/{owner}/{repo}/actions/runs/$EXECUTE_RUN_ID/pending_deployments" \
+  -F "environment_ids[]=$ENVIRONMENT_ID" \
+  -f state=approved \
+  -f "comment=Approved frozen plan $PLAN_ID" \
+  --silent
+
+wait_for_run "$EXECUTE_RUN_ID"
+```
+
+## Approve a protected pull request and resume
+
+If branch protection requires a PR review, execution safely stops after opening the PR. Copy the
+release branch from `plan.md`, approve the PR with a distinct authorized identity, then resume from
+the failed execution run:
+
+```bash
+: "${RELEASE_BRANCH:?copy the release branch from the reviewed plan}"
+: "${REVIEWER_GH_TOKEN:?inject the authorized PR reviewer token}"
+
+PR_NUMBER=$(
+  GH_TOKEN="$REVIEWER_GH_TOKEN" gh pr list \
+    --repo "$GH_REPO" \
+    --head "$RELEASE_BRANCH" \
+    --json number \
+    --jq '.[0].number'
+)
+GH_TOKEN="$REVIEWER_GH_TOKEN" gh pr review "$PR_NUMBER" \
+  --repo "$GH_REPO" \
+  --approve
+
+FAILED_STATE_RUN_ID=$EXECUTE_RUN_ID
+RESUME_RUN_ID=$(
+  gh api --method POST \
+    -H 'X-GitHub-Api-Version: 2022-11-28' \
+    'repos/{owner}/{repo}/actions/workflows/release-automator-resume.yml/dispatches' \
+    -f ref="$DEFAULT_BRANCH" \
+    -F return_run_details=true \
+    -f "inputs[plan_run_id]=$PLAN_RUN_ID" \
+    -f "inputs[state_run_id]=$FAILED_STATE_RUN_ID" \
+    -f "inputs[plan_id]=$PLAN_ID" \
+    --jq .workflow_run_id
+)
+wait_for_run "$RESUME_RUN_ID"
+```
+
+If a resume run fails after making progress, use that resume run ID as the next
+`FAILED_STATE_RUN_ID`. The state artifact prevents completed GitHub operations from being repeated.
 
 ## Use the composite action directly
 
-Advanced workflows can call the action directly. Pin a release or full commit SHA, pass settings
-through `with`, and pass credentials only through secret-backed environment variables:
+Advanced workflows can call the action directly. Pin a release or verified full commit SHA and
+pass credentials only through secret-backed environment variables:
 
 ```yaml
 - uses: jonhowe/Release-Automator@v0.3.0
@@ -150,18 +297,26 @@ through `with`, and pass credentials only through secret-backed environment vari
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
 
-For execution, pass the write PAT as `GITHUB_TOKEN` and `${{ github.token }}` as
-`GITHUB_CHECKS_TOKEN`. Prefer a GitHub App installation token instead of a PAT when short-lived or
-organization-managed credentials are required.
+For execution, pass the environment-scoped release credential as `GITHUB_TOKEN` and the built-in
+job token as `GITHUB_CHECKS_TOKEN`.
 
-## Troubleshooting
+## Troubleshooting without a browser
 
-- **Workflows do not appear:** commit the workflow files to the target repository's default branch.
-- **Source SHA is unknown:** push the source branch to the target repository and use
-  `git rev-parse HEAD`. A commit that exists only in a fork may not be present in the workflow's
-  checkout.
-- **A required check never appears:** copy the exact check-run name from an existing pull request and
-  confirm its workflow triggers on pull requests to the default branch.
-- **A workflow-file push returns 403:** add **Workflows: Read and write** to the fine-grained PAT.
-- **Execution is waiting:** open the workflow run and approve the job that references the `release`
-  environment.
+- **Workflow dispatch returns 404:** confirm the workflow file is committed to the default branch
+  and that `GH_REPO` names the target repository.
+- **Environment setup returns 403:** the operator credential needs Administration write; loading
+  secrets additionally needs repository Secrets write and Environments write.
+- **Workflow dispatch returns 403:** the operator credential needs Actions write.
+- **Run inspection or artifact download returns 403:** the operator credential needs Actions read.
+- **The plan artifact is missing:** inspect the exact `PLAN_RUN_ID` conclusion and failed logs with
+  `gh run view "$PLAN_RUN_ID" --repo "$GH_REPO" --log-failed`.
+- **Execution is waiting:** query the exact run's `pending_deployments`; approve it with the distinct
+  reviewer credential or reject it and investigate.
+- **A required check never appears:** copy its exact name from the check-runs REST response for an
+  existing PR and update `checks.required`.
+- **A workflow-file push returns 403:** grant Workflows read/write to the release credential only
+  when workflow files are deliberately included in the approved plan.
+
+Do not use `secrets: inherit`, secret-bearing `pull_request_target` workflows, unreviewed source
+commits, browser-launching `gh` flags, or UI-only approval procedures. Portable bundles contain
+included file bytes and must follow the target repository's confidentiality policy.

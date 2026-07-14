@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import subprocess
 
 import httpx
 import pytest
 
-from release_automator.github_api import GitHubClient
+from release_automator.errors import AutomatorError
+from release_automator.github_api import GitHubClient, resolve_github_token
 from release_automator.models import ChecksConfig
 
 
@@ -18,6 +20,50 @@ class Clock:
 
     def sleep(self, seconds: float) -> None:
         self.value += seconds
+
+
+def test_github_token_environment_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "github-token")
+    monkeypatch.setenv("GH_TOKEN", "gh-token")
+
+    assert resolve_github_token() == "github-token"
+
+
+def test_gh_token_is_supported_directly(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setenv("GH_TOKEN", "gh-token")
+
+    assert resolve_github_token() == "gh-token"
+
+
+def test_existing_cli_token_is_the_last_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+
+    def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(["gh", "auth", "token"], 0, stdout="cli-token\n")
+
+    monkeypatch.setattr("release_automator.github_api.subprocess.run", fake_run)
+
+    assert resolve_github_token() == "cli-token"
+
+
+def test_missing_github_token_reports_headless_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+
+    def failed_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise FileNotFoundError
+
+    monkeypatch.setattr("release_automator.github_api.subprocess.run", failed_run)
+
+    with pytest.raises(AutomatorError) as raised:
+        resolve_github_token()
+
+    message = str(raised.value)
+    assert "GITHUB_TOKEN or GH_TOKEN" in message
+    assert "non-interactive" in message
+    assert "login" not in message
 
 
 def test_wait_for_delayed_check() -> None:
