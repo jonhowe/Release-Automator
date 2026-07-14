@@ -93,6 +93,7 @@ def test_plan_freezes_metadata_without_git_writes(git_repository: Path) -> None:
     assert (git_repository / ".git" / "release-automator" / "plans").is_dir()
 
     rendered = render_plan(plan)
+    assert f"Full plan ID: `{plan.plan_id}`" in rendered
     assert "## Execution actions after approval" in rendered
     assert "Create and check out local branch `agent/add-release-automation`" in rendered
     assert "Stage only `feature.py`" in rendered

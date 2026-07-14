@@ -275,6 +275,8 @@ def render_plan(plan: FrozenPlan) -> str:
         )
     return f"""# Publication proposal `{plan.plan_id[:12]}`
 
+Full plan ID: `{plan.plan_id}`
+
 ## Scope
 
 Included:

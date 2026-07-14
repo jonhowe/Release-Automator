@@ -10,16 +10,20 @@ For local use, install dependencies and make the service credentials available t
 ```bash
 uv sync --locked --all-groups
 export OPENAI_API_KEY="..."
-gh auth login
+export GH_TOKEN="..."
 ```
 
-The GitHub identity must be able to push branches, open and merge pull requests, read checks, and
-create releases when releases are enabled.
+`GITHUB_TOKEN` takes precedence when both GitHub token variables are set. Otherwise `GH_TOKEN` is
+used directly, followed by any existing non-interactive `gh auth token` credential. Release
+Automator never starts a browser authentication flow. Git push credentials are separate and must
+also be available before execution. The GitHub identity must be able to push branches, open and
+merge pull requests, read checks, and create releases when releases are enabled.
 
 In GitHub Actions, do not use workflow inputs or repository variables for credentials. Store
 `OPENAI_API_KEY` as a repository Actions secret and store `RELEASE_AUTOMATOR_GITHUB_TOKEN` as a
 secret on a protected `release` environment. The latter should be a repository-scoped fine-grained
-PAT or short-lived GitHub App token. See the [GitHub Actions guide](github-actions.md).
+token or short-lived GitHub App token. See the fully headless
+[GitHub Actions guide](github-actions.md).
 
 ## 2. Define repository policy
 
