@@ -103,6 +103,8 @@ def test_plan_freezes_metadata_without_git_writes(git_repository: Path) -> None:
     assert "`squash`-merge it using the frozen commit SHA" in rendered
     assert "Delete remote branch `agent/add-release-automation`" in rendered
     assert "Create a non-draft GitHub Release and tag `v1.1.0`" in rendered
+    assert "Mark as latest: `true`" in rendered
+    assert "set make-latest to `true`" in rendered
     assert "delete local branch `agent/add-release-automation`" in rendered
 
     no_release = render_plan(plan.model_copy(update={"release_enabled": False}))
@@ -113,6 +115,26 @@ def test_plan_freezes_metadata_without_git_writes(git_repository: Path) -> None:
     assert overridden.version_rationale == (
         "Release version explicitly overridden to v1.0.1 during planning."
     )
+
+
+def test_plan_can_freeze_stable_release_as_not_latest(git_repository: Path) -> None:
+    (git_repository / "feature.py").write_text("enabled = True\n", encoding="utf-8")
+    base_sha = run_git(git_repository, "rev-parse", "HEAD")
+
+    plan = create_plan(
+        repo_path=git_repository,
+        include=[Path("feature.py")],
+        config=RepoConfig(checks=ChecksConfig(required=["ci"])),
+        no_release=False,
+        no_latest=True,
+        openai_client=FakeOpenAI(),
+        github_client=FakeGitHub(base_sha),  # type: ignore[arg-type]
+    )
+
+    assert plan.release_make_latest is False
+    rendered = render_plan(plan)
+    assert "Mark as latest: `false`" in rendered
+    assert "set make-latest to `false`" in rendered
 
 
 def test_plan_stops_if_validation_expands_selected_scope(git_repository: Path) -> None:

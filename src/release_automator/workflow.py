@@ -92,6 +92,7 @@ def create_plan(
     include: list[Path],
     config: RepoConfig,
     no_release: bool,
+    no_latest: bool = False,
     portable: bool = False,
     overrides: dict[str, Any] | None = None,
     openai_client: Any | None = None,
@@ -164,6 +165,11 @@ def create_plan(
         _validate_release_proposal(proposal, releases, config, release_enabled)
         if release_enabled and github.tag_exists(proposal.suggested_version or ""):
             raise AutomatorError(f"release tag already exists: {proposal.suggested_version}")
+        release_make_latest = bool(
+            release_enabled
+            and proposal.release_channel is ReleaseChannel.STABLE
+            and not no_latest
+        )
 
         slug = normalize_slug(proposal.branch_slug)
         branch_name = _unique_branch_name(repo, github, config.git.branch_prefix, slug)
@@ -183,6 +189,7 @@ def create_plan(
             validation_results=safe_validations,
             releases=releases,
             release_enabled=release_enabled,
+            release_make_latest=release_make_latest,
             proposal=proposal,
         )
         return StateStore(repo).save_plan(plan)
@@ -206,6 +213,7 @@ def render_plan(plan: FrozenPlan) -> str:
         release = (
             f"- Tag/title: `{plan.proposal.suggested_version}`\n"
             f"- Channel: `{plan.proposal.release_channel}`\n"
+            f"- Mark as latest: `{str(plan.release_make_latest).lower()}`\n"
             f"- Rationale: {plan.proposal.version_rationale}\n"
             f"- Target: the PR squash-merge commit on `{plan.base_branch}`\n\n"
             f"Release notes:\n\n{plan.proposal.release_notes}"
@@ -246,7 +254,8 @@ def render_plan(plan: FrozenPlan) -> str:
         release_action = (
             f"Create a non-draft GitHub Release and tag `{plan.proposal.suggested_version}` "
             f"targeting the returned merge commit; set prerelease to `{prerelease}` and use the "
-            "release notes printed above."
+            "release notes printed above; set make-latest to "
+            f"`{str(plan.release_make_latest).lower()}`."
         )
     else:
         release_action = "Do not create a GitHub Release or tag."
@@ -515,6 +524,7 @@ def run_plan(
                     title=tag,
                     notes=plan.proposal.release_notes or "",
                     prerelease=plan.proposal.release_channel is ReleaseChannel.PRERELEASE,
+                    make_latest=plan.release_make_latest,
                 )
                 state.release_url = release["html_url"]
             state.phase = Phase.RELEASED

@@ -13,6 +13,7 @@ from release_automator.models import (
     GitConfig,
     ModelProposal,
     Phase,
+    ReleaseChannel,
     RepoConfig,
     RunState,
 )
@@ -59,6 +60,21 @@ class SuccessfulGitHub:
 
     def delete_branch(self, _branch: str) -> None:
         self.deleted = True
+
+
+class ReleaseGitHub:
+    def __init__(self) -> None:
+        self.create_kwargs: dict[str, object] | None = None
+
+    def release_by_tag(self, _tag: str) -> None:
+        return None
+
+    def tag_exists(self, _tag: str) -> bool:
+        return False
+
+    def create_release(self, **kwargs: object) -> dict[str, str]:
+        self.create_kwargs = kwargs
+        return {"html_url": "https://example.test/releases/v1.1.0"}
 
 
 def test_run_recovers_commit_created_before_state_save(
@@ -120,3 +136,51 @@ def test_run_recovers_commit_created_before_state_save(
     assert result.merge_sha == "merge-sha"
     assert github.deleted is True
     assert run_git(git_repository, "ls-remote", "--heads", "origin", branch)
+
+
+def test_run_uses_frozen_release_latest_setting(git_repository: Path) -> None:
+    plan = FrozenPlan(
+        plan_id="b" * 64,
+        repo_root=str(git_repository),
+        repo_full_name="example/project",
+        remote_url="git@github.com:example/project.git",
+        base_branch="main",
+        base_sha="base-sha",
+        branch_name="agent/not-latest",
+        include_paths=["README.md"],
+        excluded_paths=[],
+        snapshot_hash="snapshot",
+        config=RepoConfig(
+            git=GitConfig(delete_remote_branch=False, delete_local_branch=False),
+            checks=ChecksConfig(required=["ci"]),
+        ),
+        validation_results=[],
+        releases=[],
+        release_enabled=True,
+        release_make_latest=False,
+        proposal=ModelProposal(
+            branch_slug="not-latest",
+            commit_message="Publish historical release",
+            pr_title="Publish historical release",
+            pr_body="## Summary\n\n- Publish a historical release.",
+            change_class=ChangeClass.INTERNAL,
+            suggested_version="v1.1.0",
+            release_channel=ReleaseChannel.STABLE,
+            version_rationale="Publish without replacing the latest release.",
+            release_notes="## Changes\n\n- Publish a historical release.",
+        ),
+    )
+    state = RunState(
+        plan_id=plan.plan_id,
+        phase=Phase.MERGED,
+        approved_at=datetime.now(UTC),
+        branch_name=plan.branch_name,
+        merge_sha="merge-sha",
+    )
+    github = ReleaseGitHub()
+
+    result = run_plan(plan, state, github_client=github)  # type: ignore[arg-type]
+
+    assert result.phase is Phase.RELEASED
+    assert github.create_kwargs is not None
+    assert github.create_kwargs["make_latest"] is False

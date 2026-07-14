@@ -112,6 +112,7 @@ Example inputs for a first run:
 | `include_paths` | `src` and `README.md` on separate lines | Only changed files under these paths are included. |
 | `config_path` | `release-automator.toml` | Path in the reconstructed working tree. |
 | `no_release` | `false` | Set `true` to merge without creating a tag or release. |
+| `no_latest` | `false` | Set `true` to create a stable release without marking it latest. |
 | `version` | `v1.2.3` | Optional explicit SemVer tag; otherwise OpenAI proposes one. |
 
 The planning run ID is the number in its URL: `.../actions/runs/RUN_ID`. The plan ID is the full

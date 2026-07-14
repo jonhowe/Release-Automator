@@ -71,6 +71,10 @@ def plan_command(
     no_release: Annotated[
         bool, typer.Option("--no-release", help="Stop after merge without creating a release.")
     ] = False,
+    no_latest: Annotated[
+        bool,
+        typer.Option("--no-latest", help="Create the release without marking it latest."),
+    ] = False,
     branch: Annotated[str | None, typer.Option("--branch", help="Override branch slug.")] = None,
     commit_message: Annotated[
         str | None, typer.Option("--commit-message", help="Override commit message.")
@@ -122,6 +126,7 @@ def plan_command(
             include=include or [],
             config=config,
             no_release=no_release,
+            no_latest=no_latest,
             portable=bundle_out is not None,
             overrides=overrides,
         )

@@ -52,8 +52,9 @@ uv run --locked release-automator plan \
 Planning runs validations, inspects GitHub, screens the selected diff for secrets, requests
 structured metadata from OpenAI, and saves a hashed plan beneath `.git/release-automator/`. It does
 not stage files or write to GitHub. Add `--no-release` when the workflow should stop after merging.
-For an initial or otherwise deliberate tag, pass `--version`; the rendered plan identifies it as an
-explicit override.
+Add `--no-latest` to publish a stable release without replacing the repository's current latest
+release. For an initial or otherwise deliberate tag, pass `--version`; the rendered plan identifies
+it as an explicit override. Prereleases are always created without being marked latest.
 
 ## 4. Approve and execute
 

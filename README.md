@@ -90,7 +90,9 @@ The command performs read-only repository/GitHub inspection, runs configured val
 sanitized diff to OpenAI with API storage disabled, and saves the frozen plan under the target
 repository's Git directory. It does not create a branch, stage files, or write to GitHub.
 
-Use `--no-release` to stop after merge. Metadata may be overridden while creating a new plan:
+Use `--no-release` to stop after merge. Use `--no-latest` to publish a stable release without
+replacing the repository's current latest release. Metadata may be overridden while creating a new
+plan:
 
 ```bash
 uv run release-automator plan \
@@ -101,6 +103,9 @@ uv run release-automator plan \
   --release-channel prerelease \
   --pr-body-file /tmp/pr-body.md
 ```
+
+The latest-release choice is frozen into the plan. Prereleases are always created without being
+marked latest, regardless of this option.
 
 When `--version` is supplied, the rendered rationale explicitly records that the release version
 was overridden during planning rather than proposed from release history.

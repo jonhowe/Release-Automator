@@ -21,6 +21,11 @@ on:
         required: true
         default: false
         type: boolean
+      no_latest:
+        description: Create the GitHub Release without marking it latest.
+        required: true
+        default: false
+        type: boolean
       branch:
         description: Optional branch slug override.
         required: false
@@ -88,6 +93,7 @@ jobs:
           include-paths: ${{ inputs.include_paths }}
           config-path: ${{ inputs.config_path }}
           no-release: ${{ inputs.no_release }}
+          no-latest: ${{ inputs.no_latest }}
           branch: ${{ inputs.branch }}
           commit-message: ${{ inputs.commit_message }}
           pr-title: ${{ inputs.pr_title }}
