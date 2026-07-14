@@ -14,6 +14,7 @@ BLOCKED_BASENAMES = {
     "id_rsa",
 }
 BLOCKED_SUFFIXES = {".key", ".p12", ".pfx", ".pem"}
+ENV_TEMPLATE_SUFFIXES = (".example", ".sample")
 SECRET_PATTERNS = {
     "OpenAI API key": re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"),
     "GitHub token": re.compile(r"\b(?:gh[opusr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b"),
@@ -38,7 +39,7 @@ def assert_safe_paths(paths: list[str]) -> None:
         name = path.name.lower()
         if name in BLOCKED_BASENAMES:
             raise AutomatorError(f"refusing to send sensitive file to OpenAI: {path_text}")
-        if name.startswith(".env.") and name not in {".env.example", ".env.sample"}:
+        if name.startswith(".env.") and not name.endswith(ENV_TEMPLATE_SUFFIXES):
             raise AutomatorError(f"refusing to send sensitive file to OpenAI: {path_text}")
         if path.suffix.lower() in BLOCKED_SUFFIXES:
             raise AutomatorError(f"refusing to send key/certificate file to OpenAI: {path_text}")
