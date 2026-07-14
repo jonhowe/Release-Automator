@@ -175,6 +175,8 @@ def main() -> int:
             command.extend(["--config", config_path])
         if _boolean("NO_RELEASE"):
             command.append("--no-release")
+        if _boolean("NO_LATEST"):
+            command.append("--no-latest")
         for input_name, option_name in (
             ("BRANCH", "--branch"),
             ("COMMIT_MESSAGE", "--commit-message"),

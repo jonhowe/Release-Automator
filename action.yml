@@ -21,6 +21,10 @@ inputs:
     description: Set true to stop after merging without creating a release.
     required: false
     default: "false"
+  no-latest:
+    description: Set true to create a release without marking it latest.
+    required: false
+    default: "false"
   branch:
     description: Optional branch slug override for plan mode.
     required: false
@@ -96,6 +100,7 @@ runs:
         RELEASE_AUTOMATOR_INCLUDE_PATHS: ${{ inputs.include-paths }}
         RELEASE_AUTOMATOR_CONFIG_PATH: ${{ inputs.config-path }}
         RELEASE_AUTOMATOR_NO_RELEASE: ${{ inputs.no-release }}
+        RELEASE_AUTOMATOR_NO_LATEST: ${{ inputs.no-latest }}
         RELEASE_AUTOMATOR_BRANCH: ${{ inputs.branch }}
         RELEASE_AUTOMATOR_COMMIT_MESSAGE: ${{ inputs.commit-message }}
         RELEASE_AUTOMATOR_PR_TITLE: ${{ inputs.pr-title }}

@@ -13,6 +13,8 @@ from release_automator.models import FrozenPlan, RunState
 
 
 class StateStore:
+    COMPATIBILITY_FIELDS = {"redacted_secret_types", "portable", "release_make_latest"}
+
     def __init__(self, repo: GitRepo) -> None:
         self.root = repo.git_path("release-automator")
         self.plans = self.root / "plans"
@@ -22,18 +24,23 @@ class StateStore:
     def calculate_plan_id(plan: FrozenPlan) -> str:
         values = plan.model_dump(mode="json")
         values["plan_id"] = ""
-        for optional_field in ("redacted_secret_types", "portable"):
+        for optional_field in StateStore.COMPATIBILITY_FIELDS:
             if optional_field not in plan.model_fields_set:
                 values.pop(optional_field, None)
         encoded = json.dumps(values, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(encoded).hexdigest()
 
     def save_plan(self, plan: FrozenPlan) -> FrozenPlan:
-        plan.model_fields_set.update({"redacted_secret_types", "portable"})
+        if not plan.plan_id:
+            plan.model_fields_set.update(self.COMPATIBILITY_FIELDS)
+        excluded_fields = self.COMPATIBILITY_FIELDS - plan.model_fields_set
         plan.plan_id = self.calculate_plan_id(plan)
         self.plans.mkdir(parents=True, exist_ok=True)
         path = self.plans / f"{plan.plan_id}.json"
-        path.write_text(plan.model_dump_json(indent=2), encoding="utf-8")
+        path.write_text(
+            plan.model_dump_json(indent=2, exclude=excluded_fields),
+            encoding="utf-8",
+        )
         return plan
 
     def _resolve_id(self, directory: Path, plan_id: str) -> Path:

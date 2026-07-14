@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import httpx
+import pytest
 
 from release_automator.github_api import GitHubClient
 from release_automator.models import ChecksConfig
@@ -83,7 +84,17 @@ def test_merge_is_protected_by_head_sha() -> None:
     }
 
 
-def test_prerelease_is_not_marked_latest() -> None:
+@pytest.mark.parametrize(
+    ("prerelease", "make_latest", "expected"),
+    [
+        (False, True, "true"),
+        (False, False, "false"),
+        (True, True, "false"),
+    ],
+)
+def test_release_latest_setting(
+    prerelease: bool, make_latest: bool, expected: str
+) -> None:
     captured: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -96,7 +107,8 @@ def test_prerelease_is_not_marked_latest() -> None:
         target_sha="merge-sha",
         title="v1.0.0-beta1",
         notes="notes",
-        prerelease=True,
+        prerelease=prerelease,
+        make_latest=make_latest,
     )
-    assert captured["prerelease"] is True
-    assert captured["make_latest"] == "false"
+    assert captured["prerelease"] is prerelease
+    assert captured["make_latest"] == expected

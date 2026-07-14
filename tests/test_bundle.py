@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import stat
 from pathlib import Path
@@ -126,3 +127,56 @@ def test_bundle_rejects_nonportable_plan(git_repository: Path, tmp_path: Path) -
 
     with pytest.raises(AutomatorError, match="only portable plans"):
         export_plan_bundle(git_repository, plan, tmp_path / "plan.zip")
+
+
+def test_saved_plan_without_latest_setting_keeps_legacy_hash(git_repository: Path) -> None:
+    repo = GitRepo(git_repository)
+    plan = _portable_plan(repo, ["README.md"])
+    plan.model_fields_set.discard("release_make_latest")
+    plan.plan_id = StateStore.calculate_plan_id(plan)
+    payload = plan.model_dump(mode="json")
+    payload.pop("release_make_latest")
+    store = StateStore(repo)
+    legacy_path = store.plans / f"{plan.plan_id}.json"
+    legacy_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    loaded = store.load_plan(plan.plan_id)
+
+    assert loaded.plan_id == plan.plan_id
+    assert loaded.release_make_latest is True
+    assert "release_make_latest" not in loaded.model_fields_set
+
+
+def test_bundle_without_latest_setting_keeps_legacy_hash(
+    git_repository: Path, tmp_path: Path
+) -> None:
+    target = tmp_path / "legacy-target"
+    _clone_base(git_repository, target)
+    (git_repository / "feature.txt").write_text("expected\n", encoding="utf-8")
+    plan = _portable_plan(GitRepo(git_repository), ["feature.txt"])
+    current_bundle = export_plan_bundle(git_repository, plan, tmp_path / "current.zip")
+
+    plan.model_fields_set.discard("release_make_latest")
+    plan.plan_id = StateStore.calculate_plan_id(plan)
+    plan_payload = plan.model_dump(mode="json")
+    plan_payload.pop("release_make_latest")
+    legacy_bundle = tmp_path / "legacy.zip"
+    with ZipFile(current_bundle) as source, ZipFile(
+        legacy_bundle, "w", compression=ZIP_DEFLATED
+    ) as destination:
+        for name in source.namelist():
+            data = source.read(name)
+            if name == "plan.json":
+                data = json.dumps(plan_payload, indent=2).encode()
+            elif name == "manifest.json":
+                manifest = json.loads(data)
+                manifest["plan_id"] = plan.plan_id
+                data = json.dumps(manifest, indent=2).encode()
+            destination.writestr(name, data)
+
+    imported = import_plan_bundle(target, legacy_bundle, expected_plan_id=plan.plan_id)
+
+    assert imported.plan_id == plan.plan_id
+    assert imported.release_make_latest is True
+    saved = StateStore(GitRepo(target)).plans / f"{plan.plan_id}.json"
+    assert "release_make_latest" not in json.loads(saved.read_text(encoding="utf-8"))

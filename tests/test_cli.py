@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import pytest
+from typer.testing import CliRunner
 
-from release_automator.cli import _confirm_plan
+from release_automator.cli import _confirm_plan, app
 from release_automator.errors import AutomatorError
 from release_automator.models import ChangeClass, FrozenPlan, ModelProposal, RepoConfig
 
@@ -42,3 +43,10 @@ def test_noninteractive_approval_requires_full_plan_id() -> None:
 
     with pytest.raises(AutomatorError, match="full frozen plan ID"):
         _confirm_plan(plan, "b" * 64)
+
+
+def test_plan_help_includes_no_latest() -> None:
+    result = CliRunner().invoke(app, ["plan", "--help"])
+
+    assert result.exit_code == 0
+    assert "--no-latest" in result.stdout

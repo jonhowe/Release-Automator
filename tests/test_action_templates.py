@@ -39,6 +39,26 @@ def test_consumer_plan_uses_the_openai_repository_secret() -> None:
     assert "GITHUB_TOKEN: ${{ github.token }}" in text
 
 
+def test_planning_workflows_expose_not_latest_choice() -> None:
+    for path in (
+        Path(".github/workflows/release-automator-plan.yml"),
+        TEMPLATE_ROOT / "release-automator-plan.yml",
+    ):
+        text = path.read_text(encoding="utf-8")
+        assert "no_latest:" in text
+        assert "no-latest: ${{ inputs.no_latest }}" in text
+
+
+def test_composite_action_propagates_not_latest_choice() -> None:
+    action = Path("action.yml").read_text(encoding="utf-8")
+    runner = Path("scripts/action_runner.py").read_text(encoding="utf-8")
+
+    assert "no-latest:" in action
+    assert "RELEASE_AUTOMATOR_NO_LATEST: ${{ inputs.no-latest }}" in action
+    assert 'if _boolean("NO_LATEST"):' in runner
+    assert 'command.append("--no-latest")' in runner
+
+
 def test_consumer_configuration_is_valid() -> None:
     config = load_config(TEMPLATE_ROOT / "release-automator.toml")
 

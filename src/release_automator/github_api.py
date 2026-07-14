@@ -330,7 +330,9 @@ class GitHubClient:
         title: str,
         notes: str,
         prerelease: bool,
+        make_latest: bool = True,
     ) -> dict[str, Any]:
+        effective_make_latest = make_latest and not prerelease
         return self._request(
             "POST",
             f"/repos/{self.repo_full_name}/releases",
@@ -342,6 +344,6 @@ class GitHubClient:
                 "body": notes,
                 "draft": False,
                 "prerelease": prerelease,
-                "make_latest": "false" if prerelease else "true",
+                "make_latest": str(effective_make_latest).lower(),
             },
         ).json()

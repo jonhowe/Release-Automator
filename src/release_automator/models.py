@@ -121,6 +121,7 @@ class FrozenPlan(StrictModel):
     validation_results: list[ValidationResult]
     releases: list[ReleaseInfo]
     release_enabled: bool
+    release_make_latest: bool = True
     proposal: ModelProposal
 
 
